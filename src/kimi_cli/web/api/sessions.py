@@ -283,6 +283,28 @@ async def list_sessions(
     return cast(list[Session], sessions)
 
 
+@router.get("/skills", summary="List available skills")
+async def list_skills() -> list[SkillInfo]:
+    """Discover and return all available skills for the default work directory."""
+    from kimi_cli.skill import (
+        discover_skills_from_roots,
+        resolve_skills_roots,
+    )
+
+    work_dir = KaosPath.unsafe_from_local_path(Path.home())
+    scoped_roots = await resolve_skills_roots(work_dir)
+    skills = await discover_skills_from_roots(scoped_roots)
+    return [
+        SkillInfo(
+            name=skill.name,
+            description=skill.description,
+            scope=skill.scope,
+            type=skill.type,
+        )
+        for skill in skills
+    ]
+
+
 @router.get("/{session_id}", summary="Get session")
 async def get_session(
     session_id: UUID,
@@ -631,28 +653,6 @@ async def update_session(
             detail="Failed to reload session after update",
         )
     return updated_session
-
-
-@router.get("/skills", summary="List available skills")
-async def list_skills() -> list[SkillInfo]:
-    """Discover and return all available skills for the default work directory."""
-    from kimi_cli.skill import (
-        discover_skills_from_roots,
-        resolve_skills_roots,
-    )
-
-    work_dir = KaosPath.unsafe_from_local_path(Path.home())
-    scoped_roots = await resolve_skills_roots(work_dir)
-    skills = await discover_skills_from_roots(scoped_roots)
-    return [
-        SkillInfo(
-            name=skill.name,
-            description=skill.description,
-            scope=skill.scope,
-            type=skill.type,
-        )
-        for skill in skills
-    ]
 
 
 @router.patch("/{session_id}/skill", summary="Set active skill for session")
