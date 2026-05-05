@@ -1,13 +1,12 @@
 """Kimi Code CLI Web UI application."""
 
-import asyncio
 import os
 import secrets
 import sys
 import webbrowser
-from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any, cast
 from urllib.parse import quote
 
@@ -438,15 +437,6 @@ def run_web_server(
     print_banner(banner_lines)
     # print(f"API docs available at {url}/docs")
 
-    # On Windows with Python 3.14+, asyncio subprocess requires ProactorEventLoop.
-    # uvicorn's reload mode uses multiprocessing.spawn which doesn't inherit the
-    # event loop policy. We pass a loop_factory to ensure ProactorEventLoop.
-    loop_factory: Callable[[], asyncio.AbstractEventLoop] | None = None
-    if sys.platform == "win32":
-        def _proactor_loop() -> asyncio.AbstractEventLoop:
-            return asyncio.ProactorEventLoop()  # type: ignore[attr-defined]
-        loop_factory = _proactor_loop
-
     uvicorn.run(
         "kimi_cli.web.app:create_app",
         factory=True,
@@ -456,7 +446,6 @@ def run_web_server(
         log_level="info",
         timeout_graceful_shutdown=3,
         loop="auto",
-        loop_factory=loop_factory,
     )
 
 
