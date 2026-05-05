@@ -1056,6 +1056,7 @@ async def session_stream(
             await session_process.send_status_snapshot(websocket)
         except Exception as e:
             logger.warning(f"Failed to start session environment: {e}")
+            logger.debug("Session environment startup traceback", exc_info=True)
             try:
                 error_status = SessionStatus(
                     session_id=session_id,
