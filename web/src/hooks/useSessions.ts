@@ -1048,7 +1048,7 @@ export function useSessions(): UseSessionsReturn {
         setSessions((current) =>
           current.map((s) =>
             s.sessionId === sessionId
-              ? { ...s, active_skill: skillName ?? undefined }
+              ? { ...s, activeSkill: skillName ?? undefined }
               : s,
           ),
         );
