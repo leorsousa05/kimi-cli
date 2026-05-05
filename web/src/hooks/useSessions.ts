@@ -57,7 +57,7 @@ type UseSessionsReturn = {
   /** Refresh a single session's data from API */
   refreshSession: (sessionId: string) => Promise<Session | null>;
   /** Create a new session */
-  createSession: (workDir?: string, createDir?: boolean) => Promise<Session>;
+  createSession: (workDir?: string, createDir?: boolean, activeSkill?: string | null) => Promise<Session>;
   /** Delete a session by ID */
   deleteSession: (sessionId: string) => Promise<boolean>;
   /** Select a session */
@@ -100,6 +100,8 @@ type UseSessionsReturn = {
   bulkDeleteSessions: (sessionIds: string[]) => Promise<number>;
   /** Fork a session at a specific turn index */
   forkSession: (sessionId: string, turnIndex: number) => Promise<Session>;
+  /** Set or clear the active skill for a session */
+  setSessionSkill: (sessionId: string, skillName: string | null) => Promise<boolean>;
 };
 
 const normalizeSessionPath = (value?: string): string => {
@@ -415,18 +417,21 @@ export function useSessions(): UseSessionsReturn {
    * @param createDir - Whether to auto-create directory if it doesn't exist
    */
   const createSession = useCallback(
-    async (workDir?: string, createDir?: boolean): Promise<Session> => {
+    async (workDir?: string, createDir?: boolean, activeSkill?: string | null): Promise<Session> => {
       setIsLoading(true);
       setError(null);
       try {
         // Use fetch directly to support the work_dir parameter
         const basePath = getApiBaseUrl();
-        const body: { work_dir?: string; create_dir?: boolean } = {};
+        const body: { work_dir?: string; create_dir?: boolean; active_skill?: string | null } = {};
         if (workDir) {
           body.work_dir = workDir;
         }
         if (createDir) {
           body.create_dir = createDir;
+        }
+        if (activeSkill !== undefined) {
+          body.active_skill = activeSkill;
         }
         const response = await fetch(`${basePath}/api/sessions/`, {
           method: "POST",
@@ -1018,6 +1023,48 @@ export function useSessions(): UseSessionsReturn {
   );
 
   /**
+   * Set or clear the active skill for a session
+   */
+  const setSessionSkill = useCallback(
+    async (sessionId: string, skillName: string | null): Promise<boolean> => {
+      try {
+        const basePath = getApiBaseUrl();
+        const response = await fetch(
+          `${basePath}/api/sessions/${encodeURIComponent(sessionId)}/skill`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...getAuthHeader(),
+            },
+            body: JSON.stringify({ skill_name: skillName }),
+          },
+        );
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.detail || "Failed to set skill");
+        }
+        // Update local session state
+        setSessions((current) =>
+          current.map((s) =>
+            s.sessionId === sessionId
+              ? { ...s, active_skill: skillName ?? undefined }
+              : s,
+          ),
+        );
+        return true;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to set skill";
+        console.error("Failed to set session skill:", err);
+        toast.error(message);
+        return false;
+      }
+    },
+    [],
+  );
+
+  /**
    * Fork a session at a specific turn index
    * Creates a new session with history up to the specified turn
    */
@@ -1099,5 +1146,6 @@ export function useSessions(): UseSessionsReturn {
     bulkUnarchiveSessions,
     bulkDeleteSessions,
     forkSession,
+    setSessionSkill,
   };
 }

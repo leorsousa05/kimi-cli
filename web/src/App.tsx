@@ -21,6 +21,7 @@ import { StatusBar } from "./components/status-bar";
 import { useShortcutsDialog, ShortcutsDialog } from "./components/ui/shortcuts-dialog";
 import { useSessionTags } from "./hooks/useSessionTags";
 import { useBookmarks } from "./hooks/useBookmarks";
+import { useSkills } from "./hooks/useSkills";
 
 /**
  * Get session ID from URL search params
@@ -97,6 +98,7 @@ function App() {
     bulkUnarchiveSessions,
     bulkDeleteSessions,
     forkSession,
+    setSessionSkill,
     error: sessionsError,
   } = sessionsHook;
 
@@ -112,6 +114,7 @@ function App() {
   const { open: shortcutsOpen, setOpen: setShortcutsOpen } = useShortcutsDialog();
   const sessionTags = useSessionTags();
   const bookmarks = useBookmarks();
+  const { skills } = useSkills();
 
   useEffect(() => {
     const token = consumeAuthTokenFromUrl();
@@ -306,8 +309,8 @@ function App() {
   );
 
   const handleCreateSession = useCallback(
-    async (workDir: string, createDir?: boolean) => {
-      await createSession(workDir, createDir);
+    async (workDir: string, createDir?: boolean, activeSkill?: string | null) => {
+      await createSession(workDir, createDir, activeSkill);
     },
     [createSession],
   );
@@ -600,6 +603,8 @@ function App() {
           selectedSessionId={selectedSessionId}
           sessionCount={sessions.length}
           streamStatus={streamStatus}
+          activeSkill={currentSession?.activeSkill}
+          onClearSkill={selectedSessionId ? () => setSessionSkill(selectedSessionId, null) : undefined}
         />
       </div>
 
@@ -613,6 +618,7 @@ function App() {
         onConfirm={handleCreateSession}
         fetchWorkDirs={fetchWorkDirs}
         fetchStartupDir={fetchStartupDir}
+        skills={skills}
       />
 
       {/* Mobile Sessions Sidebar */}

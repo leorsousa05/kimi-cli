@@ -144,6 +144,14 @@ Skills are modular extensions that provide:
 Skills are grouped by scope (`Project`, `User`, `Extra`, `Built-in`) so you can tell where each came from. When the user refers to "the skill in this project" or "the user-scope skill", use the scope heading to disambiguate. When multiple scopes define a skill with the same name, the more specific scope takes precedence: **Project overrides User overrides Extra overrides Built-in**.
 
 ${KIMI_SKILLS}
+{% if KIMI_ACTIVE_SKILL %}
+
+## Currently Active Skill
+
+The following skill is currently active for this session. Its instructions take precedence over general guidelines and should be followed for all turns in this session:
+
+${KIMI_ACTIVE_SKILL}
+{% endif %}
 
 ## How to use skills
 

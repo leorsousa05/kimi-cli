@@ -258,6 +258,14 @@ class Config(BaseModel):
             "Missing paths are silently skipped."
         ),
     )
+    default_skill: str | None = Field(
+        default=None,
+        description=(
+            "Default skill to activate for new sessions. The skill name is "
+            "normalized for lookup. Set to null or omit to start sessions "
+            "without an active skill."
+        ),
+    )
     telemetry: bool = Field(
         default=True,
         description="Enable anonymous telemetry to help improve kimi-cli. Set to false to disable.",

@@ -334,6 +334,14 @@ def kimi(
             help="Custom skills directories (repeatable). Overrides default discovery.",
         ),
     ] = None,
+    skill: Annotated[
+        str | None,
+        typer.Option(
+            "--skill",
+            "-s",
+            help="Pre-select a skill for the session. Use 'none' to clear default.",
+        ),
+    ] = None,
     # Loop control
     max_steps_per_turn: Annotated[
         int | None,
@@ -584,6 +592,17 @@ def kimi(
 
             nonlocal _latest_created_session
             _latest_created_session = session
+
+            # Set active skill from CLI flag or config default (for new sessions only)
+            if not resumed:
+                effective_skill: str | None = None
+                if skill is not None:
+                    effective_skill = None if skill.lower() == "none" else skill
+                elif isinstance(config, Config) and config.default_skill:
+                    effective_skill = config.default_skill
+                if effective_skill is not None:
+                    session.state.active_skill = effective_skill
+                    session.save_state()
 
             # Add CLI-provided additional directories to session state
             if local_add_dirs:

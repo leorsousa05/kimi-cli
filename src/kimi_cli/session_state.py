@@ -42,6 +42,8 @@ class SessionState(BaseModel):
     auto_archive_exempt: bool = False
     # Todo list state
     todos: list[TodoItemState] = Field(default_factory=list)  # pyright: ignore[reportUnknownVariableType]
+    # Active skill for this session (injected into system prompt)
+    active_skill: str | None = None
 
 
 _LEGACY_METADATA_FILENAME = "metadata.json"

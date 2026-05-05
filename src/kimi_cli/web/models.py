@@ -72,6 +72,7 @@ class Session(BaseModel):
     work_dir: str | None = Field(default=None, description="Working directory for the session")
     session_dir: str | None = Field(default=None, description="Session directory path")
     archived: bool = Field(default=False, description="Whether the session is archived")
+    active_skill: str | None = Field(default=None, description="Currently active skill for this session")
 
 
 class UpdateSessionRequest(BaseModel):
@@ -96,3 +97,21 @@ class GenerateTitleResponse(BaseModel):
     """Generate title response."""
 
     title: str
+
+
+class SkillInfo(BaseModel):
+    """Information about a discovered skill."""
+
+    name: str = Field(..., description="Skill name")
+    description: str = Field(..., description="Skill description")
+    scope: str = Field(..., description="Skill scope: project, user, extra, builtin")
+    type: str = Field(..., description="Skill type: standard or flow")
+
+
+class SetSkillRequest(BaseModel):
+    """Set or clear the active skill for a session."""
+
+    skill_name: str | None = Field(
+        default=None,
+        description="Skill name to activate, or null to clear",
+    )

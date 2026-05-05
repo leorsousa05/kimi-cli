@@ -1,4 +1,4 @@
-import { GitBranch, Circle, Wifi, WifiOff } from "lucide-react";
+import { GitBranch, Circle, Wifi, WifiOff, Wrench, X } from "lucide-react";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 
@@ -7,6 +7,8 @@ type StatusBarProps = {
   sessionCount: number;
   streamStatus: "ready" | "streaming" | "submitted" | "error";
   isConnected?: boolean;
+  activeSkill?: string | null;
+  onClearSkill?: () => void;
 };
 
 export function StatusBar({
@@ -14,6 +16,8 @@ export function StatusBar({
   sessionCount,
   streamStatus,
   isConnected = true,
+  activeSkill,
+  onClearSkill,
 }: StatusBarProps) {
   const statusConfig = useMemo(() => {
     switch (streamStatus) {
@@ -76,6 +80,24 @@ export function StatusBar({
       </div>
 
       <div className="flex items-center gap-3">
+        {/* Active skill */}
+        {activeSkill && (
+          <div className="flex items-center gap-1">
+            <Wrench className="size-3 text-primary" />
+            <span className="text-primary font-medium">{activeSkill}</span>
+            {onClearSkill && (
+              <button
+                type="button"
+                onClick={onClearSkill}
+                className="inline-flex items-center justify-center rounded p-0.5 text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+                title="Clear active skill"
+              >
+                <X className="size-2.5" />
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Session count */}
         <div className="flex items-center gap-1.5">
           <GitBranch className="size-3" />

@@ -32,7 +32,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { FolderOpen, Home, Loader2 } from "lucide-react";
+import { FolderOpen, Home, Loader2, Wrench } from "lucide-react";
+import { SkillSelector } from "@/features/skills/skill-selector";
 
 const HOME_DIR_REGEX = /^(\/Users\/[^/]+|\/home\/[^/]+)/;
 const TRAILING_SLASH_REGEX = /\/$/;
@@ -40,9 +41,11 @@ const TRAILING_SLASH_REGEX = /\/$/;
 type CreateSessionDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: (workDir: string, createDir?: boolean) => Promise<void>;
+  onConfirm: (workDir: string, createDir?: boolean, activeSkill?: string | null) => Promise<void>;
   fetchWorkDirs: () => Promise<string[]>;
   fetchStartupDir: () => Promise<string>;
+  skills?: import("@/hooks/useSkills").SkillInfo[];
+  defaultSkill?: string | null;
 };
 
 /**
@@ -80,6 +83,8 @@ export function CreateSessionDialog({
   onConfirm,
   fetchWorkDirs,
   fetchStartupDir,
+  skills,
+  defaultSkill,
 }: CreateSessionDialogProps): ReactElement {
   const [workDirs, setWorkDirs] = useState<string[]>(
     () => cachedWorkDirs ?? [],
@@ -91,6 +96,7 @@ export function CreateSessionDialog({
   const [pendingPath, setPendingPath] = useState("");
   const [startupDir, setStartupDir] = useState("");
   const [commandValue, setCommandValue] = useState("");
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(defaultSkill ?? null);
   const isCreatingRef = useRef(false);
   const commandListRef = useRef<HTMLDivElement>(null);
 
@@ -143,9 +149,10 @@ export function CreateSessionDialog({
       setShowConfirmCreate(false);
       setPendingPath("");
       setStartupDir("");
+      setSelectedSkill(defaultSkill ?? null);
       isCreatingRef.current = false;
     }
-  }, [open]);
+  }, [open, defaultSkill]);
 
   const handleSelect = useCallback(
     async (dir: string) => {
@@ -153,7 +160,7 @@ export function CreateSessionDialog({
       isCreatingRef.current = true;
       setIsCreating(true);
       try {
-        await onConfirm(dir);
+        await onConfirm(dir, false, selectedSkill);
         onOpenChange(false);
       } catch (err) {
         if (
@@ -169,7 +176,7 @@ export function CreateSessionDialog({
         isCreatingRef.current = false;
       }
     },
-    [onConfirm, onOpenChange],
+    [onConfirm, onOpenChange, selectedSkill],
   );
 
   const handleInputSubmit = useCallback(() => {
@@ -187,7 +194,7 @@ export function CreateSessionDialog({
     setIsCreating(true);
     isCreatingRef.current = true;
     try {
-      await onConfirm(pendingPath, true);
+      await onConfirm(pendingPath, true, selectedSkill);
       onOpenChange(false);
     } catch (err) {
       console.error("Failed to create directory:", err);
@@ -196,7 +203,7 @@ export function CreateSessionDialog({
       isCreatingRef.current = false;
       setPendingPath("");
     }
-  }, [pendingPath, onConfirm, onOpenChange]);
+  }, [pendingPath, onConfirm, onOpenChange, selectedSkill]);
 
   const handleCancelCreateDir = useCallback(() => {
     setShowConfirmCreate(false);
@@ -355,6 +362,22 @@ export function CreateSessionDialog({
             )}
           </CommandList>
         </Command>
+
+        {/* Skill selector */}
+        {skills && skills.length > 0 && (
+          <div className="border-t px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Wrench className="size-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Active skill:</span>
+              <SkillSelector
+                skills={skills}
+                activeSkill={selectedSkill}
+                onChange={setSelectedSkill}
+                disabled={isCreating}
+              />
+            </div>
+          </div>
+        )}
       </CommandDialog>
 
       <AlertDialog open={showConfirmCreate} onOpenChange={setShowConfirmCreate}>

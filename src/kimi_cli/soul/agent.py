@@ -26,6 +26,8 @@ from kimi_cli.skill import (
     discover_skills_from_roots,
     format_skills_for_prompt,
     index_skills,
+    normalize_skill_name,
+    read_skill_text,
     resolve_skills_roots,
 )
 from kimi_cli.soul.approval import Approval, ApprovalState
@@ -63,6 +65,8 @@ class BuiltinSystemPromptArgs:
     """The operating system kind, e.g. 'Windows', 'macOS', 'Linux'."""
     KIMI_SHELL: str
     """The shell executable used by the Shell tool, e.g. 'bash (`/bin/bash`)'."""
+    KIMI_ACTIVE_SKILL: str
+    """Content of the active skill (if any) to inject into the system prompt."""
 
 
 _AGENTS_MD_MAX_BYTES = 32 * 1024  # 32 KiB
@@ -239,6 +243,22 @@ class Runtime:
         logger.info("Discovered {count} skill(s)", count=len(skills))
         skills_formatted = format_skills_for_prompt(skills)
 
+        # Read active skill content if set
+        active_skill_content = ""
+        if session.state.active_skill:
+            skill = skills_by_name.get(normalize_skill_name(session.state.active_skill))
+            if skill:
+                skill_text = await read_skill_text(skill)
+                if skill_text:
+                    active_skill_content = (
+                        f"\n\n## Active Skill: {skill.name}\n\n{skill_text}"
+                    )
+            else:
+                logger.warning(
+                    "Active skill '{skill}' not found in discovered skills",
+                    skill=session.state.active_skill,
+                )
+
         # Restore additional directories from session state, pruning stale entries
         additional_dirs: list[KaosPath] = []
         pruned = False
@@ -309,6 +329,7 @@ class Runtime:
                 KIMI_WORK_DIR_LS=ls_output,
                 KIMI_AGENTS_MD=agents_md or "",
                 KIMI_SKILLS=skills_formatted or "No skills found.",
+                KIMI_ACTIVE_SKILL=active_skill_content,
                 KIMI_ADDITIONAL_DIRS_INFO=additional_dirs_info,
                 KIMI_OS=environment.os_kind,
                 KIMI_SHELL=f"{environment.shell_name} (`{environment.shell_path}`)",

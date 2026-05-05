@@ -32,6 +32,8 @@ from kimi_cli.web.models import (
     GitFileDiff,
     Session,
     SessionStatus,
+    SetSkillRequest,
+    SkillInfo,
     UpdateSessionRequest,
 )
 from kimi_cli.web.runner.messages import new_session_status_message, send_history_complete
@@ -332,6 +334,10 @@ async def create_session(request: CreateSessionRequest | None = None) -> Session
     else:
         work_dir = KaosPath.unsafe_from_local_path(Path.home())
     kimi_cli_session = await KimiCLISession.create(work_dir=work_dir)
+    # Set active skill if provided
+    if request and request.active_skill:
+        kimi_cli_session.state.active_skill = request.active_skill
+        kimi_cli_session.save_state()
     context_file = kimi_cli_session.dir / "context.jsonl"
     invalidate_sessions_cache()
     invalidate_work_dirs_cache()
@@ -351,6 +357,7 @@ async def create_session(request: CreateSessionRequest | None = None) -> Session
         ),
         work_dir=str(work_dir),
         session_dir=str(kimi_cli_session.dir),
+        active_skill=kimi_cli_session.state.active_skill,
     )
 
 
@@ -359,6 +366,7 @@ class CreateSessionRequest(BaseModel):
 
     work_dir: str | None = None
     create_dir: bool = False  # Whether to auto-create directory if it doesn't exist
+    active_skill: str | None = None  # Pre-select a skill for the session
 
 
 class ForkSessionRequest(BaseModel):
@@ -621,6 +629,73 @@ async def update_session(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to reload session after update",
+        )
+    return updated_session
+
+
+@router.get("/skills", summary="List available skills")
+async def list_skills() -> list[SkillInfo]:
+    """Discover and return all available skills for the default work directory."""
+    from kimi_cli.skill import (
+        discover_skills_from_roots,
+        resolve_skills_roots,
+    )
+
+    work_dir = KaosPath.unsafe_from_local_path(Path.home())
+    scoped_roots = await resolve_skills_roots(work_dir)
+    skills = await discover_skills_from_roots(scoped_roots)
+    return [
+        SkillInfo(
+            name=skill.name,
+            description=skill.description,
+            scope=skill.scope,
+            type=skill.type,
+        )
+        for skill in skills
+    ]
+
+
+@router.patch("/{session_id}/skill", summary="Set active skill for session")
+async def set_session_skill(
+    session_id: UUID,
+    request: SetSkillRequest,
+    runner: KimiCLIRunner = Depends(get_runner),
+) -> Session:
+    """Set or clear the active skill for a session."""
+    from kimi_cli.session_state import load_session_state, save_session_state
+    from kimi_cli.skill import (
+        discover_skills_from_roots,
+        normalize_skill_name,
+        resolve_skills_roots,
+    )
+
+    session = get_editable_session(session_id, runner)
+    session_dir = session.kimi_cli_session.dir
+    state = load_session_state(session_dir)
+
+    if request.skill_name is not None:
+        # Validate skill exists
+        work_dir = session.kimi_cli_session.work_dir
+        scoped_roots = await resolve_skills_roots(work_dir)
+        skills = await discover_skills_from_roots(scoped_roots)
+        skill_names = {normalize_skill_name(s.name) for s in skills}
+        if normalize_skill_name(request.skill_name) not in skill_names:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Skill not found: {request.skill_name}",
+            )
+        state.active_skill = request.skill_name
+    else:
+        state.active_skill = None
+
+    save_session_state(state, session_dir)
+    invalidate_sessions_cache()
+
+    updated_session = load_session_by_id(session_id)
+    if updated_session is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reload session after skill update",
         )
     return updated_session
 
