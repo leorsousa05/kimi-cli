@@ -29,6 +29,10 @@ import {
   CheckSquare,
   Square,
   PanelLeftClose,
+  Pin,
+  Circle,
+  Folder,
+  MessageSquare,
 } from "lucide-react";
 import { Virtuoso } from "react-virtuoso";
 import { KimiCliBrand } from "@/components/kimi-cli-brand";
@@ -54,7 +58,8 @@ import {
   CollapsibleContent,
 } from "@/components/ui/collapsible";
 import { hasPlatformModifier, isMacOS } from "@/hooks/utils";
-import { cn, } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import type { useSessionTags } from "@/hooks/useSessionTags";
 
 // Top-level regex constants for performance
 const NEWLINE_REGEX = /\r\n|\r|\n/;
@@ -66,6 +71,7 @@ type SessionSummary = {
   updatedAt: string;
   workDir?: string | null;
   lastUpdated: Date;
+  isRunning?: boolean;
 };
 
 type ViewMode = "list" | "grouped";
@@ -114,7 +120,7 @@ type SessionsSidebarProps = {
   onOpenCreateDialog: () => void;
   onCreateSessionInDir?: (workDir: string) => void;
   onClose?: () => void;
-  streamStatus?: "ready" | "streaming" | "submitted" | "error";
+  sessionTags?: ReturnType<typeof useSessionTags>;
 };
 
 type ContextMenuState = {
@@ -182,15 +188,20 @@ export const SessionsSidebar = memo(function SessionsSidebarComponent({
   onOpenCreateDialog,
   onCreateSessionInDir,
   onClose,
+  sessionTags,
 }: SessionsSidebarProps): ReactElement {
   const minimumSpinMs = 600;
+  const titleCache = useRef(new Map<string, string>());
   const normalizeTitle = useCallback((t: string) => {
-    // Split by any newline, join with space, then collapse whitespace
-    return String(t)
+    const cached = titleCache.current.get(t);
+    if (cached !== undefined) return cached;
+    const result = String(t)
       .split(NEWLINE_REGEX)
       .join(" ")
       .replace(WHITESPACE_REGEX, " ")
       .trim();
+    titleCache.current.set(t, result);
+    return result;
   }, []);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; sessionId: string; sessionTitle: string }>({
@@ -316,13 +327,35 @@ export const SessionsSidebar = memo(function SessionsSidebarComponent({
   // Enhanced search: support both title and workDir
   const filteredSessions = useMemo(() => {
     const search = sessionSearch.trim().toLowerCase();
-    if (!search) return sessions;
-    return sessions.filter(
-      (s) =>
-        s.title.toLowerCase().includes(search) ||
-        s.workDir?.toLowerCase().includes(search)
-    );
-  }, [sessions, sessionSearch]);
+    let list = sessions;
+    if (search) {
+      list = sessions.filter(
+        (s) =>
+          s.title.toLowerCase().includes(search) ||
+          s.workDir?.toLowerCase().includes(search)
+      );
+    }
+    // Running sessions first, then pins, then by date
+    // Pre-compute pin status to avoid repeated function calls in comparator
+    const pinSet = sessionTags ? new Set<string>() : null;
+    if (pinSet && sessionTags) {
+      for (const s of list) {
+        if (sessionTags.isPinned(s.id)) pinSet.add(s.id);
+      }
+    }
+    list = list.sort((a, b) => {
+      const aRunning = a.isRunning ? 1 : 0;
+      const bRunning = b.isRunning ? 1 : 0;
+      if (aRunning !== bRunning) return bRunning - aRunning;
+      if (pinSet) {
+        const aPin = pinSet.has(a.id) ? 1 : 0;
+        const bPin = pinSet.has(b.id) ? 1 : 0;
+        if (aPin !== bPin) return bPin - aPin;
+      }
+      return b.lastUpdated.getTime() - a.lastUpdated.getTime();
+    });
+    return list;
+  }, [sessions, sessionSearch, sessionTags]);
 
   // Group sessions by workDir
   const sessionGroups = useMemo((): SessionGroup[] => {
@@ -331,8 +364,23 @@ export const SessionsSidebar = memo(function SessionsSidebarComponent({
     const groups = new Map<string, SessionSummary[]>();
     for (const session of filteredSessions) {
       const key = session.workDir || "__other__";
-      const existing = groups.get(key) || [];
-      groups.set(key, [...existing, session]);
+      const existing = groups.get(key);
+      if (existing) {
+        existing.push(session);
+      } else {
+        groups.set(key, [session]);
+      }
+    }
+
+    // Pre-compute latest timestamp for each group
+    const groupMeta = new Map<string, number>();
+    for (const [key, items] of groups) {
+      let latest = 0;
+      for (const s of items) {
+        const t = s.lastUpdated.getTime();
+        if (t > latest) latest = t;
+      }
+      groupMeta.set(key, latest);
     }
 
     return Array.from(groups.entries())
@@ -347,8 +395,8 @@ export const SessionsSidebar = memo(function SessionsSidebarComponent({
         if (b.workDir === "__other__") return -1;
 
         // Sort by latest session time (newest first)
-        const aLatest = Math.max(...a.sessions.map(s => s.lastUpdated.getTime()));
-        const bLatest = Math.max(...b.sessions.map(s => s.lastUpdated.getTime()));
+        const aLatest = groupMeta.get(a.workDir) ?? 0;
+        const bLatest = groupMeta.get(b.workDir) ?? 0;
         return bLatest - aLatest;
       });
   }, [filteredSessions, viewMode]);
@@ -409,7 +457,7 @@ export const SessionsSidebar = memo(function SessionsSidebarComponent({
     setContextMenuIsArchived(isArchived);
   };
 
-  const handleMenuAction = async (action: "delete" | "rename" | "archive" | "unarchive" | "select-multiple") => {
+  const handleMenuAction = async (action: "delete" | "rename" | "archive" | "unarchive" | "select-multiple" | "pin") => {
     if (!contextMenu) {
       return;
     }
@@ -437,6 +485,8 @@ export const SessionsSidebar = memo(function SessionsSidebarComponent({
       setIsMultiSelectMode(true);
       setIsMultiSelectArchived(isArchived);
       setSelectedSessionIds(new Set([sessionId]));
+    } else if (action === "pin" && sessionTags) {
+      sessionTags.togglePin(sessionId);
     }
   };
 
@@ -591,6 +641,17 @@ export const SessionsSidebar = memo(function SessionsSidebarComponent({
           >
             <ArchiveRestore className="size-3.5" />
             Unarchive
+          </button>
+        )}
+        {/* Pin/Unpin */}
+        {sessionTags && !contextMenuIsArchived && (
+          <button
+            className="flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent"
+            onClick={() => handleMenuAction("pin")}
+            type="button"
+          >
+            <Pin className="size-3.5" />
+            {sessionTags.isPinned(contextMenu.sessionId) ? "Unpin" : "Pin"}
           </button>
         )}
         {/* Show Select Multiple option */}
@@ -849,20 +910,12 @@ export const SessionsSidebar = memo(function SessionsSidebarComponent({
                           <div className="flex items-center">
                             <CollapsibleTrigger className="flex flex-1 min-w-0 items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-secondary/50 group">
                               <ChevronDown className="size-3 transition-transform group-data-[state=closed]:-rotate-90" />
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="flex-1 truncate text-left font-medium">
-                                    {group.displayName}
-                                  </span>
-                                </TooltipTrigger>
-                                {group.workDir !== "__other__" && (
-                                  <TooltipContent
-                                    side="right"
-                                  >
-                                    {group.workDir}
-                                  </TooltipContent>
-                                )}
-                              </Tooltip>
+                              <span
+                                className="flex-1 truncate text-left font-medium"
+                                title={group.workDir !== "__other__" ? group.workDir : undefined}
+                              >
+                                {group.displayName}
+                              </span>
                               <span className="text-[10px] text-muted-foreground">
                                 ({group.sessions.length})
                               </span>
@@ -998,7 +1051,7 @@ export const SessionsSidebar = memo(function SessionsSidebarComponent({
                   const isSelected = isMultiSelectMode && !isMultiSelectArchived && selectedSessionIds.has(session.id);
                   const showCheckbox = isMultiSelectMode && !isMultiSelectArchived;
                   return (
-                    <div className={`flex w-full items-center gap-2  transition-colors rounded-lg ${
+                    <div className={`flex w-full items-center gap-2 transition-colors rounded-lg ${
                           isSelected
                             ? "bg-primary/10 ring-1 ring-primary/30"
                             : isActive
@@ -1056,18 +1109,41 @@ export const SessionsSidebar = memo(function SessionsSidebarComponent({
                             className="w-full text-sm font-medium text-foreground bg-background border border-input rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
                           />
                         ) : (
-                          <div className="flex items-center gap-2">
-                            <Tooltip delayDuration={500}>
-                              <TooltipTrigger asChild>
-                                <p className="text-sm font-medium text-foreground truncate flex-1">
+                          <div className="flex items-start gap-2">
+                            {/* Status indicator */}
+                            <div className="mt-1.5 shrink-0">
+                              {session.isRunning ? (
+                                <span className="relative flex size-2">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                                  <span className="relative inline-flex rounded-full size-2 bg-green-500" />
+                                </span>
+                              ) : (
+                                <Circle className="size-2 text-muted-foreground/40 fill-muted-foreground/40" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                {sessionTags?.isPinned(session.id) && (
+                                  <Pin className="size-3 text-primary shrink-0" />
+                                )}
+                                <p
+                                  className="text-sm font-medium text-foreground truncate"
+                                  title={normalizeTitle(session.title)}
+                                >
                                   {normalizeTitle(session.title)}
                                 </p>
-                              </TooltipTrigger>
-                              <TooltipContent side="right" className="max-w-md">
-                                {normalizeTitle(session.title)}
-                              </TooltipContent>
-                            </Tooltip>
-                            <span className="text-[10px] text-muted-foreground shrink-0">
+                              </div>
+                              {/* WorkDir subtitle */}
+                              {session.workDir && (
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  <Folder className="size-3 text-muted-foreground/50" />
+                                  <span className="text-[10px] text-muted-foreground/70 truncate">
+                                    {shortenPath(session.workDir, 35)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-muted-foreground shrink-0 mt-0.5">
                               {session.updatedAt}
                             </span>
                           </div>
@@ -1104,6 +1180,32 @@ export const SessionsSidebar = memo(function SessionsSidebarComponent({
                   );
                 }}
               />
+            )}
+            {/* Empty state */}
+            {filteredSessions.length === 0 && !isLoadingMore && (
+              <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center">
+                <div className="flex size-12 items-center justify-center rounded-2xl bg-secondary/50 mb-3">
+                  <MessageSquare className="size-6 text-muted-foreground/50" />
+                </div>
+                <p className="text-sm font-medium text-foreground mb-1">
+                  {sessionSearch ? "No sessions found" : "No sessions yet"}
+                </p>
+                <p className="text-xs text-muted-foreground max-w-[200px]">
+                  {sessionSearch
+                    ? "Try a different search term"
+                    : "Create a session to start coding with AI assistance"}
+                </p>
+                {!sessionSearch && (
+                  <button
+                    type="button"
+                    onClick={onOpenCreateDialog}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    <Plus className="size-3.5" />
+                    New Session
+                  </button>
+                )}
+              </div>
             )}
             </div>
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { ApprovalResponseDecision } from "@/hooks/wireTypes";
 import type { LiveMessage } from "@/hooks/types";
@@ -52,7 +52,7 @@ type AssistantMessageProps = {
   blocksExpanded: boolean;
 };
 
-export function AssistantMessage({
+function AssistantMessageComponent({
   message,
   pendingApprovalMap,
   onApprovalAction,
@@ -88,6 +88,8 @@ export function AssistantMessage({
 
   return content;
 }
+
+export const AssistantMessage = memo(AssistantMessageComponent);
 
 const renderAssistantText = (message: LiveMessage) => {
   return (

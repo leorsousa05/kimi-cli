@@ -363,10 +363,57 @@ export function useSessionStream(
   // Track MCP loading indicator message so we can remove it on MCPLoadingEnd
   const mcpLoadingMessageIdRef = useRef<string | null>(null);
 
-  // Wrapped setMessages
-  const setMessages: typeof setMessagesInternal = useCallback((action) => {
-    setMessagesInternal(action);
+  // Throttled setMessages for streaming updates — batch rapid updates to reduce
+  // React re-renders while still keeping the UI responsive.
+  const pendingMessagesRef = useRef<LiveMessage[] | null>(null);
+  const throttleTimeoutRef = useRef<number | null>(null);
+  const messagesRef = useRef<LiveMessage[]>([]);
+  const THROTTLE_MS = 80; // ~12fps for streaming text — smooth enough, much cheaper
+
+  // Keep messagesRef in sync without causing re-renders
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  const flushThrottledMessages = useCallback(() => {
+    throttleTimeoutRef.current = null;
+    const pending = pendingMessagesRef.current;
+    if (pending === null) return;
+    pendingMessagesRef.current = null;
+    setMessagesInternal(pending);
   }, []);
+
+  const setMessages: typeof setMessagesInternal = useCallback((action) => {
+    // For functional updates, resolve the action first
+    let nextMessages: LiveMessage[];
+    if (typeof action === "function") {
+      // Use pendingMessagesRef if available, otherwise the current state from ref
+      // (avoids dependency on messages state which would cause infinite loop)
+      const base = pendingMessagesRef.current ?? messagesRef.current;
+      nextMessages = (action as (prev: LiveMessage[]) => LiveMessage[])(base);
+    } else {
+      nextMessages = action;
+    }
+
+    // During streaming, throttle updates to reduce re-render frequency.
+    // Non-streaming updates (ready/error states) go through immediately.
+    if (statusRef.current === "streaming") {
+      pendingMessagesRef.current = nextMessages;
+      if (throttleTimeoutRef.current === null) {
+        throttleTimeoutRef.current = window.setTimeout(
+          flushThrottledMessages,
+          THROTTLE_MS,
+        );
+      }
+    } else {
+      pendingMessagesRef.current = null;
+      if (throttleTimeoutRef.current !== null) {
+        window.clearTimeout(throttleTimeoutRef.current);
+        throttleTimeoutRef.current = null;
+      }
+      setMessagesInternal(nextMessages);
+    }
+  }, [flushThrottledMessages]);
 
   const setAwaitingFirstResponse = useCallback((value: boolean) => {
     awaitingFirstResponseRef.current = value;
@@ -827,6 +874,19 @@ export function useSessionStream(
     onConnectionChange?.(isConnected);
   }, [isConnected, onConnectionChange]);
 
+  // Flush any pending throttled messages when streaming ends
+  useEffect(() => {
+    if (status !== "streaming" && throttleTimeoutRef.current !== null) {
+      window.clearTimeout(throttleTimeoutRef.current);
+      throttleTimeoutRef.current = null;
+      const pending = pendingMessagesRef.current;
+      if (pending !== null) {
+        pendingMessagesRef.current = null;
+        setMessagesInternal(pending);
+      }
+    }
+  }, [status]);
+
   // Create unique message ID
   const getNextMessageId = useCallback(
     (prefix: "user" | "assistant"): string => createMessageId(prefix),
@@ -1085,6 +1145,7 @@ export function useSessionStream(
               parsedUserInput.attachments.length > 0
                 ? parsedUserInput.attachments
                 : undefined,
+            createdAt: new Date(),
           };
 
           upsertMessage(userMessage);
@@ -1117,6 +1178,7 @@ export function useSessionStream(
                 variant: "thinking",
                 thinking: currentThinkingRef.current,
                 isStreaming: !isReplay,
+                createdAt: new Date(),
               };
               if (textMessageIdRef.current) {
                 // Text message already exists, insert thinking before it
@@ -1168,6 +1230,7 @@ export function useSessionStream(
                 turnIndex: turnCounterRef.current > 0 ? turnCounterRef.current - 1 : undefined,
                 content: currentTextRef.current,
                 isStreaming: !isReplay,
+                createdAt: new Date(),
               });
             } else {
               setMessages((prev) =>
@@ -1223,6 +1286,7 @@ export function useSessionStream(
               input: parsedInput,
             },
             isStreaming: !isReplay,
+            createdAt: new Date(),
           });
 
           // Store message ID in tool call state for later updates

@@ -15,8 +15,10 @@ import {
   Loader2Icon,
   PlusIcon,
   SparklesIcon,
+  Bot,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { useBookmarks } from "@/hooks/useBookmarks";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { hasPlatformModifier, isMacOS } from "@/hooks/utils";
 import {
   VirtualizedMessageList,
@@ -38,9 +40,10 @@ type ChatConversationProps = {
   isSearchOpen: boolean;
   onSearchOpenChange: (open: boolean) => void;
   onForkSession?: (turnIndex: number) => void;
+  bookmarks?: ReturnType<typeof useBookmarks>;
 };
 
-export function ChatConversation({
+function ChatConversationComponent({
   messages,
   status,
   selectedSessionId,
@@ -53,6 +56,7 @@ export function ChatConversation({
   isSearchOpen,
   onSearchOpenChange,
   onForkSession,
+  bookmarks,
 }: ChatConversationProps) {
   const listRef = useRef<VirtualizedMessageListHandle>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -120,60 +124,64 @@ export function ChatConversation({
           />
         ) : emptyNoSessionState ? (
           <ConversationEmptyState>
-            <div className="flex size-16 items-center justify-center rounded-2xl bg-secondary">
-              <SparklesIcon className="size-8 text-muted-foreground" />
+            <div className="flex flex-col items-center gap-6">
+              <div className="flex size-20 items-center justify-center rounded-3xl bg-gradient-to-br from-primary/10 to-secondary border border-border/50 shadow-lg">
+                <SparklesIcon className="size-10 text-primary" />
+              </div>
+              <div className="text-center space-y-2">
+                <p className="text-xl font-semibold text-foreground">
+                  Welcome to Kimi Code
+                </p>
+                <p className="text-sm text-muted-foreground max-w-xs">
+                  Create a session to start coding with AI assistance
+                </p>
+              </div>
+              {onCreateSession ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      className="rounded-full px-6 shadow-md"
+                      type="button"
+                      onClick={(e) => {
+                        if (hasPlatformModifier(e)) {
+                          const url = new URL(window.location.origin + window.location.pathname);
+                          url.searchParams.set("action", "create");
+                          window.open(url.toString(), "_blank");
+                        } else {
+                          onCreateSession();
+                        }
+                      }}
+                    >
+                      <PlusIcon className="size-4 mr-1" />
+                      <span>New Session</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="flex flex-col items-center gap-1" side="top">
+                    <div className="flex items-center gap-2">
+                      <span>Create new session</span>
+                      <KbdGroup>
+                        <Kbd>Shift</Kbd>
+                        <span className="text-muted-foreground">+</span>
+                        <Kbd>{newSessionShortcutModifier}</Kbd>
+                        <span className="text-muted-foreground">+</span>
+                        <Kbd>O</Kbd>
+                      </KbdGroup>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
             </div>
-            <div className="text-center">
-              <p className="text-lg font-medium text-foreground">
-                Create a session to begin
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Click the + button in the sidebar to start a new session
-              </p>
-            </div>
-            {onCreateSession ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    className="mt-1"
-                    type="button"
-                    onClick={(e) => {
-                      if (hasPlatformModifier(e)) {
-                        const url = new URL(window.location.origin + window.location.pathname);
-                        url.searchParams.set("action", "create");
-                        window.open(url.toString(), "_blank");
-                      } else {
-                        onCreateSession();
-                      }
-                    }}
-                  >
-                    <PlusIcon className="size-4" />
-                    <span>Create new session</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent className="flex flex-col items-center gap-1" side="top">
-                  <div className="flex items-center gap-2">
-                    <span>Create new session</span>
-                    <KbdGroup>
-                      <Kbd>Shift</Kbd>
-                      <span className="text-muted-foreground">+</span>
-                      <Kbd>{newSessionShortcutModifier}</Kbd>
-                      <span className="text-muted-foreground">+</span>
-                      <Kbd>O</Kbd>
-                    </KbdGroup>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>{newSessionShortcutModifier}+Click to open in new tab</span>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            ) : null}
           </ConversationEmptyState>
         ) : emptySessionState ? (
           <div className="flex h-full items-center justify-center">
-            <p className="text-sm text-muted-foreground">
-              Start a conversation...
-            </p>
+            <div className="text-center space-y-3">
+              <div className="flex size-14 items-center justify-center rounded-2xl bg-secondary mx-auto">
+                <Bot className="size-7 text-muted-foreground" />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                What would you like to build?
+              </p>
+            </div>
           </div>
         ) : null
       ) : (
@@ -189,6 +197,8 @@ export function ChatConversation({
             highlightedMessageIndex={highlightedIndex}
             onAtBottomChange={setIsAtBottom}
             onForkSession={onForkSession}
+            bookmarks={bookmarks}
+            selectedSessionId={selectedSessionId}
           />
         </div>
       )}
@@ -214,3 +224,5 @@ export function ChatConversation({
     </div>
   );
 }
+
+export const ChatConversation = memo(ChatConversationComponent);

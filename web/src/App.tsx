@@ -2,20 +2,25 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatStatus } from "ai";
 import { PromptInputProvider } from "@ai-elements";
 import { toast } from "sonner";
-import { PanelLeftOpen, PanelLeftClose } from "lucide-react";
+import { PanelLeftOpen, PanelLeftClose, Plus, Search, Sun, Pin, Keyboard } from "lucide-react";
 import { cn } from "./lib/utils";
 import { ResizablePanel, ResizablePanelGroup } from "./components/ui/resizable";
 import { ChatWorkspaceContainer } from "./features/chat/chat-workspace-container";
 import { SessionsSidebar } from "./features/sessions/sessions";
 import { CreateSessionDialog } from "./features/sessions/create-session-dialog";
 import { Toaster } from "./components/ui/sonner";
-import { formatRelativeTime } from "./hooks/utils";
+import { formatRelativeTime, isMacOS } from "./hooks/utils";
 import { useSessions } from "./hooks/useSessions";
 import { useTheme } from "./hooks/use-theme";
 import { ThemeToggle } from "./components/ui/theme-toggle";
 import type { SessionStatus } from "./lib/api/models";
 import type { PanelSize, PanelImperativeHandle } from "react-resizable-panels";
 import { consumeAuthTokenFromUrl, setAuthToken } from "./lib/auth";
+import { useCommandPalette, CommandPalette } from "./components/command-palette";
+import { StatusBar } from "./components/status-bar";
+import { useShortcutsDialog, ShortcutsDialog } from "./components/ui/shortcuts-dialog";
+import { useSessionTags } from "./hooks/useSessionTags";
+import { useBookmarks } from "./hooks/useBookmarks";
 
 /**
  * Get session ID from URL search params
@@ -101,6 +106,12 @@ function App() {
   );
 
   const [streamStatus, setStreamStatus] = useState<ChatStatus>("ready");
+
+  // Feature hooks
+  const { open: paletteOpen, setOpen: setPaletteOpen } = useCommandPalette();
+  const { open: shortcutsOpen, setOpen: setShortcutsOpen } = useShortcutsDialog();
+  const sessionTags = useSessionTags();
+  const bookmarks = useBookmarks();
 
   useEffect(() => {
     const token = consumeAuthTokenFromUrl();
@@ -343,6 +354,7 @@ function App() {
         updatedAt: formatRelativeTime(session.lastUpdated),
         workDir: session.workDir,
         lastUpdated: session.lastUpdated,
+        isRunning: session.isRunning,
       })),
     [sessions],
   );
@@ -356,6 +368,7 @@ function App() {
         updatedAt: formatRelativeTime(session.lastUpdated),
         workDir: session.workDir,
         lastUpdated: session.lastUpdated,
+        isRunning: session.isRunning,
       })),
     [archivedSessions],
   );
@@ -367,28 +380,107 @@ function App() {
     [forkSession],
   );
 
-  const renderChatPanel = () => (
-    <ChatWorkspaceContainer
-      selectedSessionId={selectedSessionId}
-      currentSession={currentSession}
-      sessionDescription={currentSession?.title}
-      onSessionStatus={handleSessionStatus}
-      onStreamStatusChange={handleStreamStatusChange}
-      uploadSessionFile={uploadSessionFile}
-      onListSessionDirectory={listSessionDirectory}
-      onGetSessionFileUrl={getSessionFileUrl}
-      onGetSessionFile={getSessionFile}
-      onOpenCreateDialog={handleOpenCreateDialog}
-      onOpenSidebar={handleOpenMobileSidebar}
-      generateTitle={generateTitle}
-      onRenameSession={renameSession}
-      onForkSession={handleForkSession}
-    />
+  const paletteActions = useMemo(() => {
+    const MOD = isMacOS() ? "Cmd" : "Ctrl";
+    const list: import("./components/command-palette").PaletteAction[] = [
+      {
+        id: "new-session",
+        title: "New Session",
+        icon: <Plus className="size-4" />,
+        shortcut: `${MOD}+Shift+O`,
+        section: "Session",
+        onSelect: () => setShowCreateDialog(true),
+      },
+      {
+        id: "search-messages",
+        title: "Search Messages",
+        icon: <Search className="size-4" />,
+        shortcut: `${MOD}+F`,
+        section: "Session",
+        onSelect: () => {
+          // Trigger search via custom event
+          window.dispatchEvent(new CustomEvent("kimi:open-search"));
+        },
+      },
+      {
+        id: "toggle-theme",
+        title: "Toggle Theme",
+        icon: <Sun className="size-4" />,
+        section: "Preferences",
+        onSelect: () => window.dispatchEvent(new CustomEvent("kimi:toggle-theme")),
+      },
+      {
+        id: "toggle-sidebar",
+        title: isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar",
+        icon: isSidebarCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />,
+        section: "Preferences",
+        onSelect: () => isSidebarCollapsed ? handleExpandSidebar() : handleCollapseSidebar(),
+      },
+      {
+        id: "shortcuts",
+        title: "Keyboard Shortcuts",
+        icon: <Keyboard className="size-4" />,
+        shortcut: "?",
+        section: "Help",
+        onSelect: () => setShortcutsOpen(true),
+      },
+    ];
+    // Add session-specific actions
+    if (selectedSessionId) {
+      list.push(
+        {
+          id: "pin-session",
+          title: sessionTags.isPinned(selectedSessionId) ? "Unpin Session" : "Pin Session",
+          icon: <Pin className="size-4" />,
+          section: "Session",
+          onSelect: () => sessionTags.togglePin(selectedSessionId),
+        },
+      );
+    }
+    return list;
+  }, [isSidebarCollapsed, selectedSessionId, sessionTags, handleExpandSidebar, handleCollapseSidebar, setShortcutsOpen]);
+
+  const chatPanel = useMemo(
+    () => (
+      <ChatWorkspaceContainer
+        selectedSessionId={selectedSessionId}
+        currentSession={currentSession}
+        sessionDescription={currentSession?.title}
+        onSessionStatus={handleSessionStatus}
+        onStreamStatusChange={handleStreamStatusChange}
+        uploadSessionFile={uploadSessionFile}
+        onListSessionDirectory={listSessionDirectory}
+        onGetSessionFileUrl={getSessionFileUrl}
+        onGetSessionFile={getSessionFile}
+        onOpenCreateDialog={handleOpenCreateDialog}
+        onOpenSidebar={handleOpenMobileSidebar}
+        generateTitle={generateTitle}
+        onRenameSession={renameSession}
+        onForkSession={handleForkSession}
+        bookmarks={bookmarks}
+      />
+    ),
+    [
+      selectedSessionId,
+      currentSession,
+      handleSessionStatus,
+      handleStreamStatusChange,
+      uploadSessionFile,
+      listSessionDirectory,
+      getSessionFileUrl,
+      getSessionFile,
+      handleOpenCreateDialog,
+      handleOpenMobileSidebar,
+      generateTitle,
+      renameSession,
+      handleForkSession,
+      bookmarks,
+    ],
   );
 
   return (
     <PromptInputProvider>
-      <div className="box-border flex h-[100dvh] flex-col bg-background text-foreground px-[calc(0.75rem+var(--safe-left))] pr-[calc(0.75rem+var(--safe-right))] pt-[calc(0.75rem+var(--safe-top))] pb-1 lg:pb-[calc(0.75rem+var(--safe-bottom))] max-lg:h-[100svh] max-lg:overflow-hidden">
+      <div className="box-border flex h-[100dvh] flex-col bg-gradient-to-br from-background via-background to-muted/30 text-foreground px-[calc(0.75rem+var(--safe-left))] pr-[calc(0.75rem+var(--safe-right))] pt-[calc(0.75rem+var(--safe-top))] pb-1 lg:pb-[calc(0.75rem+var(--safe-bottom))] max-lg:h-[100svh] max-lg:overflow-hidden">
         <div className="mx-auto flex h-full min-h-0 w-full flex-1 flex-col gap-2 max-w-none">
           {isDesktop ? (
             <ResizablePanelGroup
@@ -405,7 +497,7 @@ function App() {
                 elementRef={sidebarElementRef}
                 panelRef={sidebarPanelRef}
                 onResize={handleSidebarResize}
-                className={cn("relative min-h-0 border-r pl-0.5 pr-2 overflow-hidden")}
+                className={cn("relative min-h-0 border-r border-border/40 pl-0.5 pr-2 overflow-hidden glass rounded-l-xl")}
               >
                 {/* Collapsed sidebar - vertical strip with logo and expand button */}
                 <div
@@ -463,7 +555,6 @@ function App() {
                     onLoadMoreArchivedSessions={loadMoreArchivedSessions}
                     onOpenCreateDialog={handleOpenCreateDialog}
                     onCreateSessionInDir={handleCreateSessionInDir}
-                    streamStatus={streamStatus}
                     selectedSessionId={selectedSessionId}
                     sessions={sessionSummaries}
                     archivedSessions={archivedSessionSummaries}
@@ -474,6 +565,7 @@ function App() {
                     isLoadingArchived={isLoadingArchived}
                     searchQuery={searchQuery}
                     onSearchQueryChange={handleSearchQueryChange}
+                    sessionTags={sessionTags}
                   />
                   <div className="mt-auto flex items-center justify-between pl-2 pb-2 pr-2">
                     <div className="flex items-center gap-2">
@@ -492,16 +584,23 @@ function App() {
               </ResizablePanel>
 
               {/* Main Chat Area */}
-              <ResizablePanel id="chat" className="relative min-h-0 flex justify-center flex-1">
-                {renderChatPanel()}
+              <ResizablePanel id="chat" className="relative min-h-0 flex justify-center flex-1 glass rounded-r-xl mx-1">
+                {chatPanel}
               </ResizablePanel>
             </ResizablePanelGroup>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col">
-              {renderChatPanel()}
+              {chatPanel}
             </div>
           )}
         </div>
+
+        {/* Status Bar */}
+        <StatusBar
+          selectedSessionId={selectedSessionId}
+          sessionCount={sessions.length}
+          streamStatus={streamStatus}
+        />
       </div>
 
       {/* Toast notifications */}
@@ -543,7 +642,6 @@ function App() {
                 onOpenCreateDialog={handleOpenCreateDialog}
                 onCreateSessionInDir={handleCreateSessionInDir}
                 onClose={handleCloseMobileSidebar}
-                streamStatus={streamStatus}
                 selectedSessionId={selectedSessionId}
                 sessions={sessionSummaries}
                 archivedSessions={archivedSessionSummaries}
@@ -554,6 +652,7 @@ function App() {
                 isLoadingArchived={isLoadingArchived}
                 searchQuery={searchQuery}
                 onSearchQueryChange={handleSearchQueryChange}
+                sessionTags={sessionTags}
               />
             </div>
             <div className="flex items-center justify-between border-t px-3 py-2">
@@ -562,6 +661,12 @@ function App() {
           </div>
         </div>
       ) : null}
+
+      {/* Command Palette */}
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} actions={paletteActions} />
+
+      {/* Shortcuts Dialog */}
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </PromptInputProvider>
   );
 }

@@ -51,6 +51,8 @@ export type LiveMessage = {
   content?: string;
   attachments?: MessageAttachmentPart[];
   isStreaming?: boolean;
+  /** Timestamp when the message was created */
+  createdAt?: Date;
   variant?:
     | "text"
     | "chain-of-thought"

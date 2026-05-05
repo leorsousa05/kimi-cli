@@ -23,12 +23,14 @@ import { ChatConversation } from "./components/chat-conversation";
 import { ChatPromptComposer } from "./components/chat-prompt-composer";
 import { ApprovalDialog } from "./components/approval-dialog";
 import { QuestionDialog, usePendingQuestion } from "./components/question-dialog";
+import { ApprovalHistory } from "./components/approval-history";
 import { SessionFilesPanel } from "./components/session-files-panel";
 import { useGitDiffStats } from "@/hooks/useGitDiffStats";
 import {
   deriveActivityStatus,
   type ActivityDetail,
 } from "./components/activity-status-indicator";
+import type { useBookmarks } from "@/hooks/useBookmarks";
 
 // Re-export LiveMessage type from hooks for backward compatibility
 export type { LiveMessage } from "@/hooks/types";
@@ -92,6 +94,7 @@ type ChatWorkspaceProps = {
   onForkSession?: (turnIndex: number) => void;
   /** Error message from the session stream */
   errorMessage?: string;
+  bookmarks?: ReturnType<typeof useBookmarks>;
 };
 
 type ToolApproval = NonNullable<LiveMessage["toolCall"]>["approval"];
@@ -124,6 +127,7 @@ export const ChatWorkspace = memo(function ChatWorkspaceComponent({
   onPlanModeChange,
   onForkSession,
   errorMessage,
+  bookmarks,
 }: ChatWorkspaceProps): ReactElement {
   const [blocksExpanded, setBlocksExpanded] = useState(false);
   const [isFilesPanelOpen, setIsFilesPanelOpen] = useState(false);
@@ -309,8 +313,11 @@ export const ChatWorkspace = memo(function ChatWorkspaceComponent({
                 isSearchOpen={isSearchOpen}
                 onSearchOpenChange={setIsSearchOpen}
                 onForkSession={onForkSession}
+                bookmarks={bookmarks}
               />
             </div>
+
+            <ApprovalHistory messages={messages} />
 
             <ApprovalDialog
               messages={messages}
@@ -350,6 +357,7 @@ export const ChatWorkspace = memo(function ChatWorkspaceComponent({
                       usedTokens={usedTokens}
                       maxTokens={maxTokens}
                       tokenUsage={tokenUsage}
+                      selectedSessionId={selectedSessionId}
                     />
                   </div>
                 )}

@@ -26,6 +26,7 @@ import { useSessionStream } from "@/hooks/useSessionStream";
 import { useToolEventsStore } from "@/features/tool/store";
 import { useQueueStore } from "./queue-store";
 import { ChatWorkspace } from "./chat";
+import type { useBookmarks } from "@/hooks/useBookmarks";
 
 type PendingMessage = {
   text: string;
@@ -53,6 +54,7 @@ type ChatWorkspaceContainerProps = {
   generateTitle?: (sessionId: string) => Promise<string | null>;
   onRenameSession?: (sessionId: string, newTitle: string) => Promise<boolean>;
   onForkSession?: (sessionId: string, turnIndex: number) => Promise<void>;
+  bookmarks?: ReturnType<typeof useBookmarks>;
 };
 
 export function ChatWorkspaceContainer({
@@ -70,6 +72,7 @@ export function ChatWorkspaceContainer({
   generateTitle,
   onRenameSession,
   onForkSession,
+  bookmarks,
 }: ChatWorkspaceContainerProps): ReactElement {
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
   // Pending message state for when we need to create a session first
@@ -389,6 +392,7 @@ export function ChatWorkspaceContainer({
       onPlanModeChange={handlePlanModeChange}
       errorMessage={streamError?.message}
       onForkSession={onForkSession ? handleForkSession : undefined}
+      bookmarks={bookmarks}
     />
   );
 }

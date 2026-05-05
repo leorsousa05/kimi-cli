@@ -1,14 +1,10 @@
 import type { LiveMessage } from "@/hooks/types";
 import {
-  Message,
-  MessageActions,
   MessageAttachment,
-  MessageAttachments,
-  MessageContent,
   MessageCopyButton,
   MessageForkButton,
-  UserMessageContent,
 } from "@ai-elements";
+import { Bookmark, BookmarkCheck, User, Bot } from "lucide-react";
 import {
   AssistantMessage,
   type AssistantApprovalHandler,
@@ -17,6 +13,7 @@ import {
 import type React from "react";
 import {
   forwardRef,
+  memo,
   useCallback,
   useImperativeHandle,
   useMemo,
@@ -25,6 +22,21 @@ import {
 } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { cn } from "@/lib/utils";
+import type { useBookmarks } from "@/hooks/useBookmarks";
+
+function formatMessageTime(date: Date | undefined): string {
+  if (!date) return "";
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  const hours = date.getHours().toString().padStart(2, "0");
+  const minutes = date.getMinutes().toString().padStart(2, "0");
+  if (isToday) {
+    return `${hours}:${minutes}`;
+  }
+  const day = date.getDate().toString().padStart(2, "0");
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  return `${day}/${month} ${hours}:${minutes}`;
+}
 
 export type VirtualizedMessageListProps = {
   messages: LiveMessage[];
@@ -33,12 +45,11 @@ export type VirtualizedMessageListProps = {
   onApprovalAction?: AssistantApprovalHandler;
   canRespondToApproval: boolean;
   blocksExpanded: boolean;
-  /** Index of message to highlight (for search) */
   highlightedMessageIndex?: number;
-  /** Callback when scroll position changes */
   onAtBottomChange?: (atBottom: boolean) => void;
-  /** Callback to fork session from before a specific turn */
   onForkSession?: (turnIndex: number) => void;
+  bookmarks?: ReturnType<typeof useBookmarks>;
+  selectedSessionId?: string;
 };
 
 export type VirtualizedMessageListHandle = {
@@ -60,7 +71,7 @@ function VirtuosoScrollerComponent(
     <div
       ref={ref}
       className={cn(
-        "flex-1 overflow-y-auto overflow-x-hidden pr-1 sm:pr-2",
+        "flex-1 overflow-y-auto overflow-x-hidden [-webkit-overflow-scrolling:touch] pb-4 pr-1 contain-layout",
         className,
       )}
       {...rest}
@@ -68,82 +79,214 @@ function VirtuosoScrollerComponent(
   );
 }
 
-const VirtuosoScroller = forwardRef(VirtuosoScrollerComponent);
-
 function VirtuosoListComponent(
   props: ComponentPropsWithoutRef<"div">,
   ref: React.Ref<HTMLDivElement>,
 ) {
   const { className, ...rest } = props;
   return (
-    <div
-      ref={ref}
-      className={cn("flex flex-col px-3 py-4 sm:px-6 lg:px-8", className)}
-      {...rest}
-    />
+    <div ref={ref} className={cn("flex flex-col px-3 py-4 sm:px-6 lg:px-8", className)} {...rest} />
   );
 }
 
+const VirtuosoScroller = forwardRef(VirtuosoScrollerComponent);
 const VirtuosoList = forwardRef(VirtuosoListComponent);
 
 VirtuosoScroller.displayName = "VirtuosoScroller";
 VirtuosoList.displayName = "VirtuosoList";
 
-function getMessageSpacingClass(
-  message: LiveMessage,
-  index: number,
-  allMessages: LiveMessage[],
-): string | undefined {
-  // Terminal-style message spacing - more compact
-  // 1. User messages get breathing room (`mt-3`) from previous content
-  // 2. Assistant messages flow naturally with minimal spacing
-  // 3. Tool calls have subtle spacing to group related operations
-  const previousMessage = index > 0 ? allMessages[index - 1] : undefined;
-  const nextMessage =
-    index < allMessages.length - 1 ? allMessages[index + 1] : undefined;
+function MessageBubble({
+  role,
+  children,
+  className,
+  isStreaming,
+}: {
+  role: "user" | "assistant";
+  children: React.ReactNode;
+  className?: string;
+  isStreaming?: boolean;
+}) {
+  const isUser = role === "user";
+  return (
+    <div
+      className={cn(
+        "group flex gap-3 px-2 py-2 sm:px-4",
+        isUser ? "flex-row-reverse" : "flex-row",
+        className,
+      )}
+    >
+      {/* Avatar */}
+      <div
+        className={cn(
+          "shrink-0 flex items-center justify-center rounded-full size-7 mt-0.5 shadow-sm",
+          isUser
+            ? "bg-primary text-primary-foreground"
+            : "bg-gradient-to-br from-secondary to-muted text-foreground border border-border/60",
+        )}
+      >
+        {isUser ? <User className="size-3.5" /> : <Bot className="size-3.5" />}
+      </div>
 
-  const classes: string[] = [];
-
-  const isUser = message.role === "user";
-  const isAssistant = message.role === "assistant";
-  const isToolMessage = isAssistant && message.variant === "tool";
-  const isThinkingMessage = isAssistant && message.variant === "thinking";
-  const previousIsUser = previousMessage?.role === "user";
-  const previousIsAssistant = previousMessage?.role === "assistant";
-  const previousIsTool =
-    previousIsAssistant && previousMessage?.variant === "tool";
-
-  if (index > 0) {
-    if (isUser) {
-      // User messages get more space from previous content
-      classes.push("mt-4");
-    } else if (isAssistant) {
-      if (isToolMessage) {
-        // Tool calls: slightly more breathing room between consecutive calls
-        classes.push(previousIsUser ? "mt-2" : "mt-1.5");
-      } else if (isThinkingMessage) {
-        // Thinking blocks have minimal spacing
-        classes.push(previousIsUser ? "mt-2" : "mt-1");
-      } else if (previousIsTool) {
-        // Text after tool gets slight spacing
-        classes.push("mt-2");
-      } else if (previousIsAssistant) {
-        // Consecutive assistant messages flow together
-        classes.push("mt-1");
-      } else {
-        // After user message
-        classes.push("mt-2");
-      }
-    }
-  }
-
-  // Add bottom margin for the last message to avoid clashing with UI below
-  if (!nextMessage) {
-    classes.push("mb-30");
-  }
-
-  return classes.length > 0 ? classes.join(" ") : undefined;
+      {/* Bubble */}
+      <div
+        className={cn(
+          "relative max-w-[85%] sm:max-w-[78%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm",
+          isUser
+            ? "bg-primary text-primary-foreground rounded-tr-sm"
+            : "bg-card text-foreground rounded-tl-sm border border-border/40",
+          isStreaming && !isUser && "animate-pulse-subtle",
+        )}
+      >
+        {children}
+      </div>
+    </div>
+  );
 }
+
+function TypingIndicator() {
+  return (
+    <div className="flex items-center gap-1 px-1 py-2">
+      <span className="size-1.5 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: "0ms" }} />
+      <span className="size-1.5 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: "150ms" }} />
+      <span className="size-1.5 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: "300ms" }} />
+    </div>
+  );
+}
+
+type MessageItemProps = {
+  item: ConversationListItem;
+  highlightedMessageIndex: number;
+  pendingApprovalMap: Record<string, boolean>;
+  onApprovalAction?: AssistantApprovalHandler;
+  canRespondToApproval: boolean;
+  blocksExpanded: boolean;
+  onForkSession?: (turnIndex: number) => void;
+  bookmarks?: ReturnType<typeof useBookmarks>;
+  selectedSessionId?: string;
+};
+
+const MessageItem = memo(function MessageItem({
+  item,
+  highlightedMessageIndex,
+  pendingApprovalMap,
+  onApprovalAction,
+  canRespondToApproval,
+  blocksExpanded,
+  onForkSession,
+  bookmarks,
+  selectedSessionId,
+}: MessageItemProps) {
+  const message = item.message;
+
+  if (message.variant === "status") {
+    return (
+      <div className="flex justify-center py-2">
+        <span className="text-xs text-muted-foreground bg-secondary/50 px-3 py-1 rounded-full">
+          {message.content}
+        </span>
+      </div>
+    );
+  }
+
+  const isHighlighted = item.index === highlightedMessageIndex;
+  const isUser = message.role === "user";
+
+  return (
+    <div
+      className={cn(
+        "animate-message-in",
+        isUser && "animate-message-in-user",
+        isHighlighted && "rounded-lg ring-2 ring-primary/40",
+      )}
+    >
+      <MessageBubble
+        role={message.role}
+        isStreaming={message.isStreaming}
+      >
+        {isUser ? (
+          <div className="whitespace-pre-wrap">{message.content}</div>
+        ) : (
+          <>
+            <AssistantMessage
+              message={message}
+              pendingApprovalMap={pendingApprovalMap}
+              onApprovalAction={onApprovalAction}
+              canRespondToApproval={canRespondToApproval}
+              blocksExpanded={blocksExpanded}
+            />
+            {message.isStreaming && !message.content && (
+              <TypingIndicator />
+            )}
+          </>
+        )}
+
+        {/* Timestamp + Actions row */}
+        <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-border/20">
+          <span className={cn(
+            "text-[10px]",
+            isUser ? "text-primary-foreground/50" : "text-muted-foreground/50",
+          )}>
+            {formatMessageTime(message.createdAt)}
+          </span>
+          {!(isUser || message.isStreaming) &&
+            (!message.variant || message.variant === "text") &&
+            (message.content || (onForkSession && message.turnIndex !== undefined)) && (
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {message.content && (
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(message.content ?? "")}
+                  className="inline-flex items-center justify-center rounded-md p-1 text-muted-foreground/70 hover:text-foreground transition-colors"
+                  title="Copy"
+                >
+                  <MessageCopyButton content={message.content} />
+                </button>
+              )}
+              {bookmarks && message.id && (
+                <button
+                  type="button"
+                  onClick={() => bookmarks.toggle(selectedSessionId ?? "", message.id, message.content ?? "")}
+                  className="inline-flex items-center justify-center rounded-md p-1 text-muted-foreground/70 hover:text-foreground transition-colors"
+                  title={bookmarks.isBookmarked(message.id) ? "Remove bookmark" : "Bookmark"}
+                >
+                  {bookmarks.isBookmarked(message.id) ? (
+                    <BookmarkCheck className="size-3.5 text-primary" />
+                  ) : (
+                    <Bookmark className="size-3.5" />
+                  )}
+                </button>
+              )}
+              {onForkSession && message.turnIndex !== undefined && (
+                <MessageForkButton onFork={() => onForkSession(message.turnIndex!)} />
+              )}
+            </div>
+          )}
+        </div>
+      </MessageBubble>
+
+      {/* Attachments */}
+      {message.attachments && message.attachments.length > 0 ? (
+        <div className={cn("flex gap-2 mt-1", isUser ? "justify-end pr-12" : "pl-12")}>
+          {message.attachments.map((attachment, attIdx) => {
+            const key =
+              "kind" in attachment
+                ? attachment.filename
+                : (attachment.filename ??
+                  attachment.url ??
+                  `${message.id}-${attIdx}`);
+            return (
+              <MessageAttachment
+                className="size-24 sm:size-28"
+                data={attachment}
+                key={key}
+              />
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+});
 
 function VirtualizedMessageListComponent(
   {
@@ -156,21 +299,21 @@ function VirtualizedMessageListComponent(
     highlightedMessageIndex = -1,
     onAtBottomChange,
     onForkSession,
+    bookmarks,
+    selectedSessionId,
   }: VirtualizedMessageListProps,
   ref: React.Ref<VirtualizedMessageListHandle>,
 ) {
   const virtuosoRef = useRef<VirtuosoHandle | null>(null);
   const scrollerRef = useRef<HTMLElement | null>(null);
 
-  // Filtered messages list (excluding message-id) aligned with listItems indices
   const filteredMessages = useMemo(
     () => messages.filter((m) => m.variant !== "message-id"),
     [messages],
   );
 
   const listItems = useMemo<ConversationListItem[]>(
-    () =>
-      filteredMessages.map((message, index) => ({ message, index })),
+    () => filteredMessages.map((message, index) => ({ message, index })),
     [filteredMessages],
   );
 
@@ -188,10 +331,6 @@ function VirtualizedMessageListComponent(
     [],
   );
 
-  // Use a generous threshold to tolerate height estimation mismatches
-  // when blocks are expanded (actual heights >> defaultItemHeight).
-  // This is decoupled from atBottomStateChange which uses Virtuoso's
-  // default tight threshold for the scroll-to-bottom button.
   const handleFollowOutput = useCallback(
     (isAtBottom: boolean) => {
       if (isAtBottom) return "auto" as const;
@@ -215,21 +354,50 @@ function VirtualizedMessageListComponent(
       ) => {
         virtuosoRef.current?.scrollToIndex({
           index,
-          align: "center",
           behavior,
+          align: "center",
         });
       },
       scrollToBottom: () => {
-        if (listItems.length > 0) {
+        const len = listItems.length;
+        if (len > 0) {
           virtuosoRef.current?.scrollToIndex({
-            index: listItems.length - 1,
-            align: "end",
+            index: len - 1,
             behavior: "auto",
           });
         }
       },
     }),
     [listItems.length],
+  );
+
+  // Stable itemContent callback — Virtuoso calls this per visible item.
+  // We use a wrapper that reads from refs to avoid re-creating the function
+  // on every parent render, which would force Virtuoso to re-measure everything.
+  const itemContent = useCallback(
+    (_index: number, item: ConversationListItem) => (
+      <MessageItem
+        item={item}
+        highlightedMessageIndex={highlightedMessageIndex}
+        pendingApprovalMap={pendingApprovalMap}
+        onApprovalAction={onApprovalAction}
+        canRespondToApproval={canRespondToApproval}
+        blocksExpanded={blocksExpanded}
+        onForkSession={onForkSession}
+        bookmarks={bookmarks}
+        selectedSessionId={selectedSessionId}
+      />
+    ),
+    [
+      highlightedMessageIndex,
+      pendingApprovalMap,
+      onApprovalAction,
+      canRespondToApproval,
+      blocksExpanded,
+      onForkSession,
+      bookmarks,
+      selectedSessionId,
+    ],
   );
 
   return (
@@ -241,9 +409,9 @@ function VirtualizedMessageListComponent(
       scrollerRef={handleScrollerRef}
       followOutput={handleFollowOutput}
       defaultItemHeight={160}
-      increaseViewportBy={{ top: 400, bottom: 400 }}
-      overscan={200}
-      minOverscanItemCount={4}
+      increaseViewportBy={{ top: 200, bottom: 200 }}
+      overscan={100}
+      minOverscanItemCount={2}
       atBottomStateChange={handleAtBottomChange}
       initialTopMostItemIndex={{
         index: Math.max(0, listItems.length - 1),
@@ -256,87 +424,7 @@ function VirtualizedMessageListComponent(
       computeItemKey={(_index: number, item: ConversationListItem) =>
         item.message.id
       }
-      itemContent={(_index, item) => {
-        const message = item.message;
-
-        if (message.variant === "status") {
-          return (
-            <Message
-              className={messages.length > 0 ? "mt-2" : undefined}
-              from="assistant"
-            >
-              <MessageContent className="text-xs text-muted-foreground">
-                {message.content}
-              </MessageContent>
-            </Message>
-          );
-        }
-
-        const spacingClass = getMessageSpacingClass(
-          message,
-          item.index,
-          filteredMessages,
-        );
-
-        const isHighlighted = item.index === highlightedMessageIndex;
-
-        return (
-          <Message
-            className={cn(
-              spacingClass,
-              isHighlighted && "rounded-lg ring-2 ring-primary/50",
-            )}
-            from={message.role}
-          >
-            {message.role === "user" ? (
-              message.content ? (
-                <UserMessageContent>{message.content}</UserMessageContent>
-              ) : null
-            ) : (
-              <>
-                <AssistantMessage
-                  message={message}
-                  pendingApprovalMap={pendingApprovalMap}
-                  onApprovalAction={onApprovalAction}
-                  canRespondToApproval={canRespondToApproval}
-                  blocksExpanded={blocksExpanded}
-                />
-                {!message.isStreaming &&
-                  (!message.variant || message.variant === "text") &&
-                  (message.content || (onForkSession && message.turnIndex !== undefined)) && (
-                  <MessageActions className="
-                  hover-reveal
-                   opacity-0 group-hover:opacity-100 transition-opacity mt-1">
-                    {message.content && <MessageCopyButton content={message.content} />}
-                    {onForkSession && message.turnIndex !== undefined && (
-                      <MessageForkButton onFork={() => onForkSession(message.turnIndex!)} />
-                    )}
-                  </MessageActions>
-                )}
-              </>
-            )}
-            {message.attachments && message.attachments.length > 0 ? (
-              <MessageAttachments>
-                {message.attachments.map((attachment, attIdx) => {
-                  const key =
-                    "kind" in attachment
-                      ? attachment.filename
-                      : (attachment.filename ??
-                        attachment.url ??
-                        `${message.id}-${attIdx}`);
-                  return (
-                    <MessageAttachment
-                      className="size-28 sm:size-32 lg:size-40"
-                      data={attachment}
-                      key={key}
-                    />
-                  );
-                })}
-              </MessageAttachments>
-            ) : null}
-          </Message>
-        );
-      }}
+      itemContent={itemContent}
     />
   );
 }
@@ -344,4 +432,3 @@ function VirtualizedMessageListComponent(
 export const VirtualizedMessageList = forwardRef(
   VirtualizedMessageListComponent,
 );
-VirtualizedMessageList.displayName = "VirtualizedMessageList";

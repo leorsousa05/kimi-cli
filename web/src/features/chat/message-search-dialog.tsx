@@ -114,8 +114,8 @@ export function MessageSearchDialog({
   const resultsRef = useRef<HTMLDivElement>(null);
 
   const matches = useMemo(
-    () => searchMessages(messages, query, 80),
-    [messages, query],
+    () => (open ? searchMessages(messages, query, 80) : []),
+    [messages, query, open],
   );
 
   // Reset selection when matches change

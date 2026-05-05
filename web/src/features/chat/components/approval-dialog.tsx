@@ -198,9 +198,15 @@ export function ApprovalDialog({
             )}
           </div>
 
-          {/* Description */}
+          {/* Command Preview */}
           {approval.description && (
-            <div className="rounded-md bg-muted/50 px-3 py-2 w-full max-h-44 overflow-auto">
+            <div className="rounded-md bg-muted/50 border border-border/40 px-3 py-2 w-full max-h-44 overflow-auto">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <div className="size-1.5 rounded-full bg-amber-400" />
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Command Preview
+                </span>
+              </div>
               <pre className="font-mono text-xs whitespace-pre-wrap text-foreground/90">
                 {approval.description}
               </pre>
@@ -284,7 +290,7 @@ export function ApprovalDialog({
               )}
             >
               {feedbackMode ? "Cancel feedback" : "Decline with feedback"}
-              {!feedbackMode && !approvalPending && (
+              {!(feedbackMode || approvalPending ) && (
                 <Kbd className="ml-1.5">4</Kbd>
               )}
             </Button>

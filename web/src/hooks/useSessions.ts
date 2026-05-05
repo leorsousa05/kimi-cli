@@ -499,11 +499,12 @@ export function useSessions(): UseSessionsReturn {
           const next = current.filter((s) => s.sessionId !== sessionId);
 
           // If we deleted the selected session, select the first remaining one
-          if (sessionId === selectedSessionId && next.length > 0) {
-            setSelectedSessionId(next[0].sessionId);
-          } else if (next.length === 0) {
-            setSelectedSessionId("");
-          }
+          setSelectedSessionId((prevSelected) => {
+            if (sessionId === prevSelected) {
+              return next.length > 0 ? next[0].sessionId : "";
+            }
+            return prevSelected;
+          });
 
           return next;
         });
@@ -518,7 +519,7 @@ export function useSessions(): UseSessionsReturn {
         setIsLoading(false);
       }
     },
-    [selectedSessionId],
+    [],
   );
 
   /**
@@ -782,13 +783,12 @@ export function useSessions(): UseSessionsReturn {
         setSessions((current) => {
           const next = current.filter((s) => s.sessionId !== sessionId);
           // If we archived the selected session, select another one
-          if (sessionId === selectedSessionId) {
-            if (next.length > 0) {
-              setSelectedSessionId(next[0].sessionId);
-            } else {
-              setSelectedSessionId("");
+          setSelectedSessionId((prevSelected) => {
+            if (sessionId === prevSelected) {
+              return next.length > 0 ? next[0].sessionId : "";
             }
-          }
+            return prevSelected;
+          });
           return next;
         });
 
@@ -804,7 +804,7 @@ export function useSessions(): UseSessionsReturn {
         return false;
       }
     },
-    [refreshArchivedSessions, selectedSessionId],
+    [refreshArchivedSessions],
   );
 
   /**
@@ -896,13 +896,12 @@ export function useSessions(): UseSessionsReturn {
             (s) => !successfulIds.includes(s.sessionId),
           );
           // If we archived the selected session, select another one
-          if (successfulIds.includes(selectedSessionId)) {
-            if (next.length > 0) {
-              setSelectedSessionId(next[0].sessionId);
-            } else {
-              setSelectedSessionId("");
+          setSelectedSessionId((prevSelected) => {
+            if (successfulIds.includes(prevSelected)) {
+              return next.length > 0 ? next[0].sessionId : "";
             }
-          }
+            return prevSelected;
+          });
           return next;
         });
         await refreshArchivedSessions();
@@ -910,7 +909,7 @@ export function useSessions(): UseSessionsReturn {
 
       return successCount;
     },
-    [refreshArchivedSessions, selectedSessionId],
+    [refreshArchivedSessions],
   );
 
   /**
@@ -1000,13 +999,12 @@ export function useSessions(): UseSessionsReturn {
           const next = current.filter(
             (s) => !successfulIds.includes(s.sessionId),
           );
-          if (successfulIds.includes(selectedSessionId)) {
-            if (next.length > 0) {
-              setSelectedSessionId(next[0].sessionId);
-            } else {
-              setSelectedSessionId("");
+          setSelectedSessionId((prevSelected) => {
+            if (successfulIds.includes(prevSelected)) {
+              return next.length > 0 ? next[0].sessionId : "";
             }
-          }
+            return prevSelected;
+          });
           return next;
         });
         setArchivedSessions((current) =>
@@ -1016,7 +1014,7 @@ export function useSessions(): UseSessionsReturn {
 
       return successCount;
     },
-    [selectedSessionId],
+    [],
   );
 
   /**

@@ -42,8 +42,10 @@ import {
   useCallback,
   useRef,
   useState,
+  useEffect,
 } from "react";
 import type { SessionFileEntry } from "@/hooks/useSessions";
+import { useDraftStore } from "@/hooks/useDraftStore";
 
 type ChatPromptComposerProps = {
   status: ChatStatus;
@@ -69,6 +71,7 @@ type ChatPromptComposerProps = {
   usedTokens?: number;
   maxTokens?: number;
   tokenUsage?: TokenUsage | null;
+  selectedSessionId?: string;
 };
 
 export const ChatPromptComposer = memo(function ChatPromptComposerComponent({
@@ -92,11 +95,37 @@ export const ChatPromptComposer = memo(function ChatPromptComposerComponent({
   usedTokens,
   maxTokens,
   tokenUsage,
+  selectedSessionId,
 }: ChatPromptComposerProps): ReactElement {
   const promptController = usePromptInputController();
   const attachmentContext = usePromptInputAttachments();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const draft = useDraftStore(selectedSessionId);
+
+  // Load draft on session change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only on session change
+  useEffect(() => {
+    const saved = draft.load();
+    if (saved) {
+      promptController.textInput.setInput(saved);
+    }
+  }, [selectedSessionId]);
+
+  // Auto-save draft on text change
+  useEffect(() => {
+    const t = setTimeout(() => draft.save(promptController.textInput.value), 500);
+    return () => clearTimeout(t);
+  }, [promptController.textInput.value, draft]);
+
+  const handleSubmitWithClear = useCallback(
+    async (message: PromptInputMessage) => {
+      await onSubmit(message);
+      draft.clear();
+    },
+    [onSubmit, draft],
+  );
 
   const {
     isOpen: isMentionOpen,
@@ -192,7 +221,7 @@ export const ChatPromptComposer = memo(function ChatPromptComposerComponent({
   }, []);
 
   return (
-    <div className="w-full">
+    <div className="w-full px-2 sm:px-4 pb-2">
       <PromptToolbar
         gitDiffStats={gitDiffStats}
         isGitDiffLoading={isGitDiffLoading}
@@ -205,18 +234,19 @@ export const ChatPromptComposer = memo(function ChatPromptComposerComponent({
         tokenUsage={tokenUsage}
       />
 
+      <div className="rounded-2xl border border-border/60 bg-card/80 shadow-lg shadow-black/5 backdrop-blur-sm input-glow transition-all duration-300">
       <PromptInput
         accept="*"
         className={cn(
-          "w-full [&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border",
+          "w-full",
           planMode && "[&_[data-slot=input-group]]:border-dashed [&_[data-slot=input-group]]:!border-blue-200 dark:[&_[data-slot=input-group]]:!border-blue-600"
         )}
         multiple
         maxFiles={MEDIA_CONFIG.maxCount}
-        onSubmit={onSubmit}
+        onSubmit={handleSubmitWithClear}
         onError={handleFileError}
       >
-        <PromptInputBody className="w-full relative">
+        <PromptInputBody className="w-full relative px-3 pt-3">
           {/* Expand/Collapse button - positioned relative to entire input body */}
           <button
             type="button"
@@ -302,7 +332,7 @@ export const ChatPromptComposer = memo(function ChatPromptComposerComponent({
             </div>
           </div>
         </PromptInputBody>
-        <PromptInputFooter className="w-full gap-2 py-1 border-none bg-transparent shadow-none">
+        <PromptInputFooter className="w-full gap-2 py-2 px-3 border-none bg-transparent shadow-none">
           <PromptInputTools className="flex-1 min-w-0 flex-wrap">
             <GlobalConfigControls planMode={planMode} onPlanModeChange={onPlanModeChange} />
           </PromptInputTools>
@@ -318,7 +348,7 @@ export const ChatPromptComposer = memo(function ChatPromptComposerComponent({
                 }}
                 size="icon-sm"
                 variant="default"
-                className="shrink-0"
+                className="shrink-0 rounded-full"
               >
                 <SquareIcon className="size-4" />
               </PromptInputButton>
@@ -328,7 +358,7 @@ export const ChatPromptComposer = memo(function ChatPromptComposerComponent({
                     aria-label="Queue message"
                     size="icon-sm"
                     variant="outline"
-                    className="shrink-0"
+                    className="shrink-0 rounded-full"
                     disabled={!(canSendMessage && currentSession)}
                   >
                     <ArrowUpIcon className="size-4" />
@@ -346,11 +376,12 @@ export const ChatPromptComposer = memo(function ChatPromptComposerComponent({
                 isUploading ||
                 !currentSession
               }
-              className="shrink-0"
+              className="shrink-0 rounded-full"
             />
           )}
         </PromptInputFooter>
       </PromptInput>
+      </div>
     </div>
   );
 });
