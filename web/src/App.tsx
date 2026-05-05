@@ -114,7 +114,12 @@ function App() {
   const { open: shortcutsOpen, setOpen: setShortcutsOpen } = useShortcutsDialog();
   const sessionTags = useSessionTags();
   const bookmarks = useBookmarks();
-  const { skills } = useSkills();
+  const { skills, refreshSkills } = useSkills();
+
+  // Load skills once on app mount
+  useEffect(() => {
+    refreshSkills();
+  }, [refreshSkills]);
 
   useEffect(() => {
     const token = consumeAuthTokenFromUrl();
