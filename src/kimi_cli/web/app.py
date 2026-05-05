@@ -1,5 +1,6 @@
 """Kimi Code CLI Web UI application."""
 
+import asyncio
 import os
 import secrets
 import sys
@@ -437,6 +438,14 @@ def run_web_server(
     print_banner(banner_lines)
     # print(f"API docs available at {url}/docs")
 
+    # Force ProactorEventLoop on Windows for subprocess support
+    # Python 3.14+ deprecated set_event_loop_policy but still needs it on Windows
+    # for subprocess support until the new asyncio APIs are fully adopted.
+    if sys.platform == "win32":
+        policy = getattr(asyncio, "WindowsProactorEventLoopPolicy", None)
+        if policy:
+            asyncio.set_event_loop_policy(policy())  # type: ignore[deprecated]
+
     uvicorn.run(
         "kimi_cli.web.app:create_app",
         factory=True,
@@ -445,6 +454,7 @@ def run_web_server(
         reload=reload,
         log_level="info",
         timeout_graceful_shutdown=3,
+        loop="auto",
     )
 
 
