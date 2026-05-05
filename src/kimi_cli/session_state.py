@@ -42,7 +42,9 @@ class SessionState(BaseModel):
     auto_archive_exempt: bool = False
     # Todo list state
     todos: list[TodoItemState] = Field(default_factory=list)  # pyright: ignore[reportUnknownVariableType]
-    # Active skill for this session (injected into system prompt)
+    # Active skills for this session (injected into system prompt)
+    active_skills: list[str] = Field(default_factory=list)
+    # Deprecated: kept for migration from old state files
     active_skill: str | None = None
 
 
@@ -125,6 +127,12 @@ def load_session_state(session_dir: Path) -> SessionState:
                 "Failed to persist migration for {path}, will retry next load",
                 path=session_dir,
             )
+
+    # Migrate old active_skill (single) to active_skills (list)
+    if state.active_skill and not state.active_skills:
+        state.active_skills = [state.active_skill]
+        state.active_skill = None
+        save_session_state(state, session_dir)
 
     return state
 

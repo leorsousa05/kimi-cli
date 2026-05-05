@@ -57,7 +57,7 @@ type UseSessionsReturn = {
   /** Refresh a single session's data from API */
   refreshSession: (sessionId: string) => Promise<Session | null>;
   /** Create a new session */
-  createSession: (workDir?: string, createDir?: boolean, activeSkill?: string | null) => Promise<Session>;
+  createSession: (workDir?: string, createDir?: boolean, activeSkills?: string[]) => Promise<Session>;
   /** Delete a session by ID */
   deleteSession: (sessionId: string) => Promise<boolean>;
   /** Select a session */
@@ -100,8 +100,8 @@ type UseSessionsReturn = {
   bulkDeleteSessions: (sessionIds: string[]) => Promise<number>;
   /** Fork a session at a specific turn index */
   forkSession: (sessionId: string, turnIndex: number) => Promise<Session>;
-  /** Set or clear the active skill for a session */
-  setSessionSkill: (sessionId: string, skillName: string | null) => Promise<boolean>;
+  /** Set or clear the active skills for a session */
+  setSessionSkills: (sessionId: string, skillNames: string[]) => Promise<boolean>;
 };
 
 const normalizeSessionPath = (value?: string): string => {
@@ -417,21 +417,21 @@ export function useSessions(): UseSessionsReturn {
    * @param createDir - Whether to auto-create directory if it doesn't exist
    */
   const createSession = useCallback(
-    async (workDir?: string, createDir?: boolean, activeSkill?: string | null): Promise<Session> => {
+    async (workDir?: string, createDir?: boolean, activeSkills?: string[]): Promise<Session> => {
       setIsLoading(true);
       setError(null);
       try {
         // Use fetch directly to support the work_dir parameter
         const basePath = getApiBaseUrl();
-        const body: { work_dir?: string; create_dir?: boolean; active_skill?: string | null } = {};
+        const body: { work_dir?: string; create_dir?: boolean; active_skills?: string[] } = {};
         if (workDir) {
           body.work_dir = workDir;
         }
         if (createDir) {
           body.create_dir = createDir;
         }
-        if (activeSkill !== undefined) {
-          body.active_skill = activeSkill;
+        if (activeSkills !== undefined && activeSkills.length > 0) {
+          body.active_skills = activeSkills;
         }
         const response = await fetch(`${basePath}/api/sessions/`, {
           method: "POST",
@@ -1023,10 +1023,10 @@ export function useSessions(): UseSessionsReturn {
   );
 
   /**
-   * Set or clear the active skill for a session
+   * Set or clear the active skills for a session
    */
-  const setSessionSkill = useCallback(
-    async (sessionId: string, skillName: string | null): Promise<boolean> => {
+  const setSessionSkills = useCallback(
+    async (sessionId: string, skillNames: string[]): Promise<boolean> => {
       try {
         const basePath = getApiBaseUrl();
         const response = await fetch(
@@ -1037,26 +1037,26 @@ export function useSessions(): UseSessionsReturn {
               "Content-Type": "application/json",
               ...getAuthHeader(),
             },
-            body: JSON.stringify({ skill_name: skillName }),
+            body: JSON.stringify({ skill_names: skillNames }),
           },
         );
         if (!response.ok) {
           const data = await response.json();
-          throw new Error(data.detail || "Failed to set skill");
+          throw new Error(data.detail || "Failed to set skills");
         }
         // Update local session state
         setSessions((current) =>
           current.map((s) =>
             s.sessionId === sessionId
-              ? { ...s, activeSkill: skillName ?? undefined }
+              ? { ...s, activeSkills: skillNames, activeSkill: skillNames[0] ?? undefined }
               : s,
           ),
         );
         return true;
       } catch (err) {
         const message =
-          err instanceof Error ? err.message : "Failed to set skill";
-        console.error("Failed to set session skill:", err);
+          err instanceof Error ? err.message : "Failed to set skills";
+        console.error("Failed to set session skills:", err);
         toast.error(message);
         return false;
       }
@@ -1146,6 +1146,6 @@ export function useSessions(): UseSessionsReturn {
     bulkUnarchiveSessions,
     bulkDeleteSessions,
     forkSession,
-    setSessionSkill,
+    setSessionSkills,
   };
 }

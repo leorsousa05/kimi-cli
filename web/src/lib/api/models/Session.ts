@@ -76,7 +76,13 @@ export interface Session {
      */
     archived?: boolean;
     /**
-     * Currently active skill for this session
+     * Currently active skills for this session
+     * @type {Array<string>}
+     * @memberof Session
+     */
+    activeSkills?: string[];
+    /**
+     * Deprecated: use activeSkills
      * @type {string}
      * @memberof Session
      */
@@ -111,6 +117,7 @@ export function SessionFromJSONTyped(json: any, ignoreDiscriminator: boolean): S
         'workDir': json['work_dir'] == null ? undefined : json['work_dir'],
         'sessionDir': json['session_dir'] == null ? undefined : json['session_dir'],
         'archived': json['archived'] == null ? undefined : json['archived'],
+        'activeSkills': json['active_skills'] == null ? undefined : json['active_skills'],
         'activeSkill': json['active_skill'] == null ? undefined : json['active_skill'],
     };
 }
@@ -134,6 +141,7 @@ export function SessionToJSONTyped(value?: Session | null, ignoreDiscriminator: 
         'work_dir': value['workDir'],
         'session_dir': value['sessionDir'],
         'archived': value['archived'],
+        'active_skills': value['activeSkills'],
         'active_skill': value['activeSkill'],
     };
 }

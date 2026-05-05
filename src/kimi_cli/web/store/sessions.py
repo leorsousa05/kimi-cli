@@ -177,7 +177,8 @@ def _build_joint_session(entry: SessionIndexEntry) -> JointSession:
         session_dir=str(entry.session_dir),
         kimi_cli_session=kimi_session,
         archived=entry.state.archived,
-        active_skill=entry.state.active_skill,
+        active_skills=entry.state.active_skills,
+        active_skill=entry.state.active_skills[0] if entry.state.active_skills else entry.state.active_skill,
     )
 
 

@@ -243,21 +243,23 @@ class Runtime:
         logger.info("Discovered {count} skill(s)", count=len(skills))
         skills_formatted = format_skills_for_prompt(skills)
 
-        # Read active skill content if set
+        # Read active skills content if set
         active_skill_content = ""
-        if session.state.active_skill:
-            skill = skills_by_name.get(normalize_skill_name(session.state.active_skill))
-            if skill:
-                skill_text = await read_skill_text(skill)
-                if skill_text:
-                    active_skill_content = (
-                        f"\n\n## Active Skill: {skill.name}\n\n{skill_text}"
+        if session.state.active_skills:
+            skill_sections: list[str] = []
+            for skill_name in session.state.active_skills:
+                skill = skills_by_name.get(normalize_skill_name(skill_name))
+                if skill:
+                    skill_text = await read_skill_text(skill)
+                    if skill_text:
+                        skill_sections.append(f"## Active Skill: {skill.name}\n\n{skill_text}")
+                else:
+                    logger.warning(
+                        "Active skill '{skill}' not found in discovered skills",
+                        skill=skill_name,
                     )
-            else:
-                logger.warning(
-                    "Active skill '{skill}' not found in discovered skills",
-                    skill=session.state.active_skill,
-                )
+            if skill_sections:
+                active_skill_content = "\n\n" + "\n\n".join(skill_sections)
 
         # Restore additional directories from session state, pruning stale entries
         additional_dirs: list[KaosPath] = []

@@ -32,7 +32,7 @@ from kimi_cli.web.models import (
     GitFileDiff,
     Session,
     SessionStatus,
-    SetSkillRequest,
+    SetSkillsRequest,
     SkillInfo,
     UpdateSessionRequest,
 )
@@ -357,8 +357,12 @@ async def create_session(request: CreateSessionRequest | None = None) -> Session
         work_dir = KaosPath.unsafe_from_local_path(Path.home())
     kimi_cli_session = await KimiCLISession.create(work_dir=work_dir)
     # Set active skill if provided
-    if request and request.active_skill:
-        kimi_cli_session.state.active_skill = request.active_skill
+    if request and request.active_skills:
+        kimi_cli_session.state.active_skills = request.active_skills
+        kimi_cli_session.save_state()
+    elif request and request.active_skill:
+        # Backward compatibility: single skill
+        kimi_cli_session.state.active_skills = [request.active_skill]
         kimi_cli_session.save_state()
     context_file = kimi_cli_session.dir / "context.jsonl"
     invalidate_sessions_cache()
@@ -379,7 +383,8 @@ async def create_session(request: CreateSessionRequest | None = None) -> Session
         ),
         work_dir=str(work_dir),
         session_dir=str(kimi_cli_session.dir),
-        active_skill=kimi_cli_session.state.active_skill,
+        active_skills=kimi_cli_session.state.active_skills,
+        active_skill=kimi_cli_session.state.active_skills[0] if kimi_cli_session.state.active_skills else None,
     )
 
 
@@ -388,7 +393,8 @@ class CreateSessionRequest(BaseModel):
 
     work_dir: str | None = None
     create_dir: bool = False  # Whether to auto-create directory if it doesn't exist
-    active_skill: str | None = None  # Pre-select a skill for the session
+    active_skills: list[str] = Field(default_factory=list)  # Pre-select skills for the session
+    active_skill: str | None = None  # Deprecated: use active_skills
 
 
 class ForkSessionRequest(BaseModel):
@@ -658,7 +664,7 @@ async def update_session(
 @router.patch("/{session_id}/skill", summary="Set active skill for session")
 async def set_session_skill(
     session_id: UUID,
-    request: SetSkillRequest,
+    request: SetSkillsRequest,
     runner: KimiCLIRunner = Depends(get_runner),
 ) -> Session:
     """Set or clear the active skill for a session."""
@@ -673,20 +679,23 @@ async def set_session_skill(
     session_dir = session.kimi_cli_session.dir
     state = load_session_state(session_dir)
 
-    if request.skill_name is not None:
-        # Validate skill exists
+    if request.skill_names:
+        # Validate all skills exist
         work_dir = session.kimi_cli_session.work_dir
         scoped_roots = await resolve_skills_roots(work_dir)
         skills = await discover_skills_from_roots(scoped_roots)
-        skill_names = {normalize_skill_name(s.name) for s in skills}
-        if normalize_skill_name(request.skill_name) not in skill_names:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Skill not found: {request.skill_name}",
-            )
-        state.active_skill = request.skill_name
+        available_names = {normalize_skill_name(s.name) for s in skills}
+        for skill_name in request.skill_names:
+            if normalize_skill_name(skill_name) not in available_names:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Skill not found: {skill_name}",
+                )
+        state.active_skills = request.skill_names
     else:
-        state.active_skill = None
+        state.active_skills = []
+    # Clear deprecated field
+    state.active_skill = None
 
     save_session_state(state, session_dir)
     invalidate_sessions_cache()

@@ -7,8 +7,8 @@ type StatusBarProps = {
   sessionCount: number;
   streamStatus: "ready" | "streaming" | "submitted" | "error";
   isConnected?: boolean;
-  activeSkill?: string | null;
-  onClearSkill?: () => void;
+  activeSkills?: string[];
+  onClearSkills?: () => void;
 };
 
 export function StatusBar({
@@ -16,8 +16,8 @@ export function StatusBar({
   sessionCount,
   streamStatus,
   isConnected = true,
-  activeSkill,
-  onClearSkill,
+  activeSkills,
+  onClearSkills,
 }: StatusBarProps) {
   const statusConfig = useMemo(() => {
     switch (streamStatus) {
@@ -80,17 +80,26 @@ export function StatusBar({
       </div>
 
       <div className="flex items-center gap-3">
-        {/* Active skill */}
-        {activeSkill && (
-          <div className="flex items-center gap-1">
+        {/* Active skills */}
+        {activeSkills && activeSkills.length > 0 && (
+          <div className="flex items-center gap-1.5">
             <Wrench className="size-3 text-primary" />
-            <span className="text-primary font-medium">{activeSkill}</span>
-            {onClearSkill && (
+            <div className="flex items-center gap-1">
+              {activeSkills.map((skill, i) => (
+                <span key={skill} className="text-primary font-medium">
+                  {skill}
+                  {i < activeSkills.length - 1 && (
+                    <span className="text-muted-foreground mx-0.5">+</span>
+                  )}
+                </span>
+              ))}
+            </div>
+            {onClearSkills && (
               <button
                 type="button"
-                onClick={onClearSkill}
+                onClick={onClearSkills}
                 className="inline-flex items-center justify-center rounded p-0.5 text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
-                title="Clear active skill"
+                title="Clear active skills"
               >
                 <X className="size-2.5" />
               </button>

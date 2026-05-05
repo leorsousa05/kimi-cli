@@ -595,13 +595,16 @@ def kimi(
 
             # Set active skill from CLI flag or config default (for new sessions only)
             if not resumed:
-                effective_skill: str | None = None
                 if skill is not None:
-                    effective_skill = None if skill.lower() == "none" else skill
+                    effective_skills = [] if skill.lower() == "none" else [skill]
+                elif isinstance(config, Config) and config.default_skills:
+                    effective_skills = config.default_skills
                 elif isinstance(config, Config) and config.default_skill:
-                    effective_skill = config.default_skill
-                if effective_skill is not None:
-                    session.state.active_skill = effective_skill
+                    effective_skills = [config.default_skill]
+                else:
+                    effective_skills = []
+                if effective_skills:
+                    session.state.active_skills = effective_skills
                     session.save_state()
 
             # Add CLI-provided additional directories to session state

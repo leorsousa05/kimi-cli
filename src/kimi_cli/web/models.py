@@ -72,7 +72,8 @@ class Session(BaseModel):
     work_dir: str | None = Field(default=None, description="Working directory for the session")
     session_dir: str | None = Field(default=None, description="Session directory path")
     archived: bool = Field(default=False, description="Whether the session is archived")
-    active_skill: str | None = Field(default=None, description="Currently active skill for this session")
+    active_skills: list[str] = Field(default_factory=list, description="Currently active skills for this session")
+    active_skill: str | None = Field(default=None, description="Deprecated: use active_skills")
 
 
 class UpdateSessionRequest(BaseModel):
@@ -108,10 +109,14 @@ class SkillInfo(BaseModel):
     type: str = Field(..., description="Skill type: standard or flow")
 
 
-class SetSkillRequest(BaseModel):
-    """Set or clear the active skill for a session."""
+class SetSkillsRequest(BaseModel):
+    """Set or clear the active skills for a session."""
 
-    skill_name: str | None = Field(
-        default=None,
-        description="Skill name to activate, or null to clear",
+    skill_names: list[str] = Field(
+        default_factory=list,
+        description="Skill names to activate, or empty list to clear",
     )
+
+
+# Keep alias for backward compatibility
+SetSkillRequest = SetSkillsRequest

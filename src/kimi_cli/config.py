@@ -266,6 +266,13 @@ class Config(BaseModel):
             "without an active skill."
         ),
     )
+    default_skills: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Default skills to activate for new sessions. Takes precedence over "
+            "default_skill if set."
+        ),
+    )
     telemetry: bool = Field(
         default=True,
         description="Enable anonymous telemetry to help improve kimi-cli. Set to false to disable.",

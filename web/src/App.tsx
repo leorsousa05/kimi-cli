@@ -98,7 +98,7 @@ function App() {
     bulkUnarchiveSessions,
     bulkDeleteSessions,
     forkSession,
-    setSessionSkill,
+    setSessionSkills,
     error: sessionsError,
   } = sessionsHook;
 
@@ -314,8 +314,8 @@ function App() {
   );
 
   const handleCreateSession = useCallback(
-    async (workDir: string, createDir?: boolean, activeSkill?: string | null) => {
-      await createSession(workDir, createDir, activeSkill);
+    async (workDir: string, createDir?: boolean, activeSkills?: string[]) => {
+      await createSession(workDir, createDir, activeSkills);
     },
     [createSession],
   );
@@ -608,8 +608,8 @@ function App() {
           selectedSessionId={selectedSessionId}
           sessionCount={sessions.length}
           streamStatus={streamStatus}
-          activeSkill={currentSession?.activeSkill}
-          onClearSkill={selectedSessionId ? () => setSessionSkill(selectedSessionId, null) : undefined}
+          activeSkills={currentSession?.activeSkills ?? (currentSession?.activeSkill ? [currentSession.activeSkill] : [])}
+          onClearSkills={selectedSessionId ? () => setSessionSkills(selectedSessionId, []) : undefined}
         />
       </div>
 
