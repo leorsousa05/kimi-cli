@@ -16,6 +16,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
+# Windows + Python 3.14: ProactorEventLoop is required for asyncio subprocess support.
+if sys.platform == "win32":
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())  # type: ignore[attr-defined,deprecated]
+    except AttributeError:
+        pass
+
 from kosong.message import ContentPart, ImageURLPart, TextPart
 from PIL import Image
 from PIL.Image import Image as PILImage

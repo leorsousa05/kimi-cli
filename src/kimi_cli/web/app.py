@@ -438,13 +438,14 @@ def run_web_server(
     print_banner(banner_lines)
     # print(f"API docs available at {url}/docs")
 
-    # Force ProactorEventLoop on Windows for subprocess support
-    # Python 3.14+ deprecated set_event_loop_policy but still needs it on Windows
-    # for subprocess support until the new asyncio APIs are fully adopted.
+    # On Windows with Python 3.14+, asyncio subprocess requires ProactorEventLoop.
+    # uvicorn's reload mode uses multiprocessing.spawn which doesn't inherit the
+    # event loop policy. We pass a loop_factory to ensure ProactorEventLoop.
+    loop_factory: Callable[[], asyncio.AbstractEventLoop] | None = None
     if sys.platform == "win32":
-        policy = getattr(asyncio, "WindowsProactorEventLoopPolicy", None)
-        if policy:
-            asyncio.set_event_loop_policy(policy())  # type: ignore[deprecated]
+        def _proactor_loop() -> asyncio.AbstractEventLoop:
+            return asyncio.ProactorEventLoop()  # type: ignore[attr-defined]
+        loop_factory = _proactor_loop
 
     uvicorn.run(
         "kimi_cli.web.app:create_app",
@@ -455,6 +456,7 @@ def run_web_server(
         log_level="info",
         timeout_graceful_shutdown=3,
         loop="auto",
+        loop_factory=loop_factory,
     )
 
 
